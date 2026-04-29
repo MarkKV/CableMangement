@@ -212,6 +212,7 @@ const [contentGrid] = BUI.Component.create<
   TEMPLATES.ContentGridState
 >(TEMPLATES.contentGridTemplate, {
   components,
+  world,
   id: CONTENT_GRID_ID,
   viewportTemplate: viewportCardTemplate,
 });

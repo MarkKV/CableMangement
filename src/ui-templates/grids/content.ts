@@ -6,6 +6,10 @@ import {
   CONTENT_GRID_ID,
   SMALL_COLUMN_WIDTH,
 } from "../../globals";
+import {
+  cablesPanelTemplate,
+  CablesPanelState,
+} from "../../cable-management/cable-panel";
 
 type Viewer = "viewer";
 
@@ -21,12 +25,15 @@ type ElementData = {
 
 type Viewpoints = { name: "viewpoints"; state: TEMPLATES.ViewpointsPanelState };
 
-export type ContentGridElements = [Viewer, Models, ElementData, Viewpoints];
+type Cables = { name: "cables"; state: CablesPanelState };
+
+export type ContentGridElements = [Viewer, Models, ElementData, Viewpoints, Cables];
 
 export type ContentGridLayouts = ["Viewer"];
 
 export interface ContentGridState {
   components: OBC.Components;
+  world: OBC.World;
   id: string;
   viewportTemplate: BUI.StatelessComponent;
 }
@@ -34,7 +41,7 @@ export interface ContentGridState {
 export const contentGridTemplate: BUI.StatefullComponent<ContentGridState> = (
   state,
 ) => {
-  const { components } = state;
+  const { components, world } = state;
 
   const onCreated = (e?: Element) => {
     if (!e) return;
@@ -53,6 +60,10 @@ export const contentGridTemplate: BUI.StatefullComponent<ContentGridState> = (
         template: TEMPLATES.viewpointsPanelTemplate,
         initialState: { components },
       },
+      cables: {
+        template: cablesPanelTemplate,
+        initialState: { components, world },
+      },
       viewer: state.viewportTemplate,
     };
 
@@ -60,7 +71,7 @@ export const contentGridTemplate: BUI.StatefullComponent<ContentGridState> = (
       Viewer: {
         template: `
           "models viewer elementData" 1fr
-          "viewpoints viewer elementData" 1fr
+          "viewpoints viewer cables" 1fr
           /${SMALL_COLUMN_WIDTH} 1fr ${SMALL_COLUMN_WIDTH}
         `,
       },
