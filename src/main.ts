@@ -107,6 +107,9 @@ const ifcLoader = components.get(OBC.IfcLoader);
 await ifcLoader.setup({
   autoSetWasm: false,
   wasm: { absolute: true, path: "/" },
+  webIfc: {
+    COORDINATE_TO_ORIGIN: true,
+  },
 });
 
 const highlighter = components.get(OBF.Highlighter);
@@ -183,6 +186,42 @@ fragments.list.onItemSet.add(async ({ value: model }) => {
   };
   world.scene.three.add(model.object);
   await fragments.core.update(true);
+
+  // ── Diagnose: zeige geladene IFC-Typen in der Browser-Konsole ────────────
+  try {
+    const geoCats = await model.getItemsWithGeometryCategories();
+    const withGeo = (geoCats.filter(Boolean) as string[]).map((c) => c.toUpperCase());
+    const unique = [...new Set(withGeo)].sort();
+
+    console.groupCollapsed(
+      `%c[IFC] Modell geladen — ${geoCats.length} Elemente mit Geometrie`,
+      "color:#00e67a;font-weight:bold"
+    );
+    console.log("Alle Typen:", unique);
+
+    const MEP = unique.filter(
+      (c) =>
+        c.includes("ELECTRIC") ||
+        c.includes("DISTRIBUT") ||
+        c.includes("FLOW") ||
+        c.includes("CABLE") ||
+        c.includes("TRANSFORMER") ||
+        c.includes("CONDUIT") ||
+        c.includes("JUNCTION")
+    );
+    if (MEP.length > 0) {
+      console.log("%cElektro/MEP-Typen mit Geometrie:", "color:#ffaa00", MEP);
+    } else {
+      console.warn(
+        "Keine Elektro/MEP-Typen mit Geometrie gefunden.\n" +
+        "→ Prüfe ob die fehlenden Elemente im IFC überhaupt eine 3D-Geometrie haben\n" +
+        "→ Öffne das IFC in einem anderen Viewer (z.B. IFC.js oder Solibri)"
+      );
+    }
+    console.groupEnd();
+  } catch {
+    // Diagnose ist optional — Fehler nicht weitergeben
+  }
 });
 
 // Viewport Layouts
