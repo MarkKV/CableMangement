@@ -13,7 +13,7 @@ import {
 } from "./cables";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Panel state
+// Exported panel state (used by content grid)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface CablesPanelState {
@@ -22,8 +22,10 @@ export interface CablesPanelState {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Types
+// Internal types
 // ─────────────────────────────────────────────────────────────────────────────
+
+type StepStatus = "inactive" | "editing" | "confirmed";
 
 interface PickedElement {
   modelId: string;
@@ -33,12 +35,34 @@ interface PickedElement {
   category: string;
 }
 
-interface TrasseEntry {
-  modelId: string;
-  expressId: number;
-  point: THREE.Vector3;
-  label: string;
-  length: number; // metres, estimated from bounding box
+interface RouteElement extends PickedElement {
+  length: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Routing state  (one object, reset on cancel / start)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface RoutingState {
+  cable: Cable | null;
+  step1: StepStatus;
+  step2: StepStatus;
+  step3: StepStatus;
+  source: PickedElement | null;    // pending in step-1 edit, locked after OK
+  route: RouteElement[];            // built in step-2
+  target: PickedElement | null;    // pending in step-3 edit, locked after OK
+}
+
+function makeEmptyState(): RoutingState {
+  return {
+    cable: null,
+    step1: "inactive",
+    step2: "inactive",
+    step3: "inactive",
+    source: null,
+    route: [],
+    target: null,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -47,16 +71,9 @@ interface TrasseEntry {
 
 let _initialized = false;
 let _panelUpdate: (() => void) | null = null;
-
-// Routing state
 let _active = false;
-let _cable: Cable | null = null;
-let _sourceData: PickedElement | null = null;
-let _targetData: PickedElement | null = null;
-let _trassEntries: TrasseEntry[] = [];
+let _rs: RoutingState = makeEmptyState();
 let _dragSrcIdx: number | null = null;
-
-// Shared refs
 let _components: OBC.Components | null = null;
 let _world: OBC.World | null = null;
 let _mouseX = 0;
@@ -64,35 +81,26 @@ let _mouseY = 0;
 let _lastRayPoint: THREE.Vector3 | null = null;
 
 // DOM singletons
-let _routingPanel: HTMLDivElement | null = null;
+let _panel: HTMLDivElement | null = null;
 let _tooltip: HTMLDivElement | null = null;
 let _modal: HTMLDialogElement | null = null;
+let _panelListenerAttached = false;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// IFC helpers
+// IFC / fragment helpers
 // ─────────────────────────────────────────────────────────────────────────────
-
-const SOURCE_TYPES = new Set([
-  "IfcElectricDistributionBoard",
-  "IfcTransformer",
-]);
-
-const isSource = (cat: string | null) =>
-  cat === null ? true : SOURCE_TYPES.has(cat);
-
-const isTrasse = (cat: string | null) => cat === "IfcCableTray";
 
 async function getCategory(
   fragments: OBC.FragmentsManager,
   modelId: string,
   expressId: number
-): Promise<string | null> {
+): Promise<string> {
   const model = fragments.list.get(modelId);
-  if (!model) return null;
+  if (!model) return "IfcBuildingElement";
   try {
-    return await model.getItem(expressId).getCategory();
+    return (await model.getItem(expressId).getCategory()) ?? "IfcBuildingElement";
   } catch {
-    return null;
+    return "IfcBuildingElement";
   }
 }
 
@@ -132,217 +140,469 @@ async function getElementLength(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Routing panel helpers
+// Routing state transitions
 // ─────────────────────────────────────────────────────────────────────────────
 
-function activeSection(): "source" | "trasse" | "target" | "none" {
-  if (!_sourceData) return "source";
-  if (_trassEntries.length === 0) return "trasse";
-  if (!_targetData) return "target";
-  return "none";
+function editingStep(): 1 | 2 | 3 | null {
+  if (_rs.step1 === "editing") return 1;
+  if (_rs.step2 === "editing") return 2;
+  if (_rs.step3 === "editing") return 3;
+  return null;
 }
 
-function canConfirm(): boolean {
-  return _sourceData !== null && _trassEntries.length > 0 && _targetData !== null;
+function startRouting(cable: Cable) {
+  _active = true;
+  _rs = makeEmptyState();
+  _rs.cable = cable;
+  _rs.step1 = "editing";
 }
 
-function totalTrasseLength(): number {
-  return Math.round(_trassEntries.reduce((s, e) => s + e.length, 0) * 10) / 10;
+async function cancelRouting() {
+  if (!_components) return;
+  const hl = _components.get(OBF.Highlighter);
+  _active = false;
+  if (_rs.cable) {
+    const idx = cableRegistry.indexOf(_rs.cable);
+    if (idx !== -1) cableRegistry.splice(idx, 1);
+  }
+  _rs = makeEmptyState();
+  await hl.clear("cable-source");
+  await hl.clear("cable-route");
+  await hl.clear("cable-target");
+  renderPanel();
+  hideTooltip();
+  _panelUpdate?.();
 }
 
-function totalLineLength(): number {
-  const pts: THREE.Vector3[] = [];
-  if (_sourceData) pts.push(_sourceData.point);
-  for (const e of _trassEntries) pts.push(e.point);
-  if (_targetData) pts.push(_targetData.point);
+function okStep1() {
+  if (!_rs.source) return;
+  _rs.step1 = "confirmed";
+  _rs.step2 = "editing";
+  renderPanel();
+}
+
+function okStep2() {
+  if (_rs.route.length === 0) return;
+  _rs.step2 = "confirmed";
+  _rs.step3 = "editing";
+  renderPanel();
+}
+
+function okStep3() {
+  if (!_rs.target) return;
+  _rs.step3 = "confirmed";
+  renderPanel();
+}
+
+async function editStep(n: 1 | 2 | 3) {
+  if (!_components) return;
+  const hl = _components.get(OBF.Highlighter);
+
+  if (n === 1) {
+    _rs.step1 = "editing";
+    // Clear steps 2 + 3
+    _rs.step2 = "inactive";
+    _rs.step3 = "inactive";
+    _rs.route = [];
+    _rs.target = null;
+    await hl.clear("cable-route");
+    await hl.clear("cable-target");
+  } else if (n === 2) {
+    _rs.step2 = "editing";
+    _rs.step3 = "inactive";
+    _rs.target = null;
+    await hl.clear("cable-target");
+  } else {
+    _rs.step3 = "editing";
+    _rs.target = null;
+    await hl.clear("cable-target");
+  }
+  renderPanel();
+}
+
+function allConfirmed(): boolean {
+  return _rs.step1 === "confirmed" && _rs.step2 === "confirmed" && _rs.step3 === "confirmed";
+}
+
+function confirmCable() {
+  if (!_rs.cable || !_rs.source || !_rs.target || !_world) return;
+
+  const c = _rs.cable;
+  c.sourceModelId = _rs.source.modelId;
+  c.sourceExpressId = _rs.source.expressId;
+  c.sourceLabel = _rs.source.label;
+  c.targetModelId = _rs.target.modelId;
+  c.targetExpressId = _rs.target.expressId;
+  c.targetLabel = _rs.target.label;
+  c.trassIds = _rs.route.map((e) => ({ modelId: e.modelId, expressId: e.expressId }));
+  c.status = "geplant";
+
+  const pts: THREE.Vector3[] = [
+    _rs.source.point,
+    ..._rs.route.map((e) => e.point),
+    _rs.target.point,
+  ];
+
   let d = 0;
   for (let i = 1; i < pts.length; i++) d += pts[i].distanceTo(pts[i - 1]);
-  return Math.round(d * 10) / 10;
+  c.length = Math.round(d * 10) / 10;
+
+  if (pts.length >= 2) {
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({ color: new THREE.Color(c.color), depthTest: false })
+    );
+    line.renderOrder = 999;
+    line.name = `cable-line-${c.id}`;
+    _world.scene.three.add(line);
+  }
+
+  // Clear routing highlights
+  if (_components) {
+    const hl = _components.get(OBF.Highlighter);
+    hl.clear("cable-source");
+    hl.clear("cable-route");
+    hl.clear("cable-target");
+  }
+
+  _active = false;
+  _rs = makeEmptyState();
+  renderPanel();
+  hideTooltip();
+  _panelUpdate?.();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Routing panel DOM
+// Highlight sync helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildSourcePlaceholder(): string {
-  return `<div class="rp-placeholder">Im Viewer Schaltschrank oder Trafo anklicken</div>`;
+async function syncRouteHighlight() {
+  if (!_components) return;
+  const hl = _components.get(OBF.Highlighter);
+  if (_rs.route.length === 0) { await hl.clear("cable-route"); return; }
+  const map: OBC.ModelIdMap = {};
+  for (const e of _rs.route) {
+    if (!map[e.modelId]) map[e.modelId] = new Set();
+    map[e.modelId].add(e.expressId);
+  }
+  await hl.highlightByID("cable-route", map, false, false);
 }
 
-function buildTrasseRows(): string {
-  if (_trassEntries.length === 0) {
-    return `
-      <div class="rp-placeholder">IfcCableTray Elemente anklicken</div>
-      <div class="rp-placeholder-sub">Mehrfachauswahl möglich</div>`;
-  }
-  const total = totalTrasseLength();
-  const rows = _trassEntries.map((e, i) => `
-    <div class="rp-trasse-row" draggable="true" data-idx="${i}">
-      <span class="rp-drag-handle" title="Ziehen zum Sortieren">⠿</span>
-      <span class="rp-td-name">${esc(e.label)}</span>
-      <span class="rp-td-len">${e.length > 0 ? e.length + "m" : "—"}</span>
-      <button class="rp-x" data-action="remove-trasse" data-idx="${i}">✕</button>
-    </div>`).join("");
+// ─────────────────────────────────────────────────────────────────────────────
+// HTML helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function esc(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Panel HTML builders
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildProgress(): string {
+  const dot = (s: StepStatus) =>
+    s === "confirmed" ? "rp-prog-dot--done" : s === "editing" ? "rp-prog-dot--active" : "rp-prog-dot--off";
+  const icon = (s: StepStatus) => (s === "confirmed" ? "✓" : s === "editing" ? "●" : "○");
+
   return `
-    <div class="rp-trasse-list" id="rp-trasse-list">${rows}</div>
-    <div class="rp-trasse-total">
-      <span>TOTAL</span>
-      <span>${total > 0 ? total + "m" : "—"}</span>
+    <div class="rp-progress">
+      <span class="rp-prog-step">
+        <span class="rp-prog-dot ${dot(_rs.step1)}">${icon(_rs.step1)}</span>
+        <span class="rp-prog-label">① Quelle</span>
+      </span>
+      <span class="rp-prog-arrow">→</span>
+      <span class="rp-prog-step">
+        <span class="rp-prog-dot ${dot(_rs.step2)}">${icon(_rs.step2)}</span>
+        <span class="rp-prog-label">② Kabelweg</span>
+      </span>
+      <span class="rp-prog-arrow">→</span>
+      <span class="rp-prog-step">
+        <span class="rp-prog-dot ${dot(_rs.step3)}">${icon(_rs.step3)}</span>
+        <span class="rp-prog-label">③ Ziel</span>
+      </span>
     </div>`;
 }
 
-function buildSummary(): string {
-  const src = _sourceData?.label ?? "—";
-  const tgt = _targetData?.label ?? "—";
-  const tCount = _trassEntries.length;
-  const len = totalLineLength();
-  const check = (ok: boolean) => ok ? `<span class="rp-ok">✓</span>` : "";
-  return `
-    <div class="rp-summary">
-      <div class="rp-summary-title">ZUSAMMENFASSUNG</div>
-      <div class="rp-summary-row">
-        <span>Quelle:</span><span>${esc(src)} ${check(!!_sourceData)}</span>
-      </div>
-      <div class="rp-summary-row">
-        <span>Trassen:</span><span>${tCount > 0 ? tCount + " gewählt" : "—"} ${check(tCount > 0)}</span>
-      </div>
-      <div class="rp-summary-row">
-        <span>Ziel:</span><span>${esc(tgt)} ${check(!!_targetData)}</span>
-      </div>
-      <div class="rp-summary-row rp-summary-len">
-        <span>Länge:</span><span>${len > 0 ? len + " m" : "—"}</span>
-      </div>
-    </div>`;
-}
-
-function renderRoutingPanel() {
-  if (!_routingPanel) {
-    _routingPanel = document.createElement("div");
-    _routingPanel.id = "rp-panel";
-    _routingPanel.className = "rp-panel";
-    document.body.appendChild(_routingPanel);
-  }
-
-  if (!_active || !_cable) {
-    _routingPanel.classList.remove("rp-panel--open");
-    return;
-  }
-
-  const act = activeSection();
-  const shortType = CABLE_TYPES.find((t) => t.value === _cable!.type)
-    ?.label.split("—")[0].trim() ?? _cable.type;
-  const ok = canConfirm();
-
-  _routingPanel.innerHTML = `
-    <div class="rp-header">
-      <div class="rp-header-title">KABELWEG DEFINIEREN</div>
-      <div class="rp-header-sub">${esc(_cable.id)} · ${esc(shortType)} · ${esc(_cable.voltage)}</div>
-    </div>
-
-    <div class="rp-body">
-      <div class="rp-section${act === "source" ? " rp-section--active" : ""}">
-        <div class="rp-section-title">
-          <span class="rp-dot${_sourceData ? " rp-dot--ok" : ""}">●</span>
-          ① QUELLE
-        </div>
-        ${_sourceData ? buildPickedRow(_sourceData, "remove-source") : buildSourcePlaceholder()}
-      </div>
-
-      <div class="rp-section${act === "trasse" ? " rp-section--active" : ""}">
-        <div class="rp-section-title">
-          <span class="rp-dot${_trassEntries.length > 0 ? " rp-dot--ok" : ""}">●</span>
-          ② KABELTRASSEN
-          ${_trassEntries.length > 0
-            ? `<span class="rp-count">(${_trassEntries.length} gewählt)</span>` : ""}
-        </div>
-        ${buildTrasseRows()}
-      </div>
-
-      <div class="rp-section${act === "target" ? " rp-section--active" : ""}">
-        <div class="rp-section-title">
-          <span class="rp-dot${_targetData ? " rp-dot--ok" : ""}">●</span>
-          ③ ZIEL
-        </div>
-        ${_targetData ? buildPickedRow(_targetData, "remove-target") : buildSourcePlaceholder()}
-      </div>
-
-      ${buildSummary()}
-    </div>
-
-    <div class="rp-actions">
-      <button id="rp-create" class="rp-btn-primary${ok ? "" : " rp-btn--disabled"}"
-        ${ok ? "" : 'disabled title="Bitte alle 3 Felder ausfüllen"'}>
-        ✓ Kabel erstellen
-      </button>
-      <button id="rp-cancel" class="rp-btn-cancel">✕ Abbrechen</button>
-    </div>
-  `;
-
-  _routingPanel.classList.add("rp-panel--open");
-
-  // Attach button listeners
-  document.getElementById("rp-cancel")?.addEventListener("click", () => cancelRouting());
-  document.getElementById("rp-create")?.addEventListener("click", () => { if (ok) confirmRouting(); });
-
-  // Attach ✕ buttons
-  _routingPanel.querySelectorAll<HTMLButtonElement>("[data-action]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const action = btn.dataset.action!;
-      if (action === "remove-source") removeSource();
-      if (action === "remove-target") removeTarget();
-      if (action === "remove-trasse") removeTrasse(Number(btn.dataset.idx));
-    });
-  });
-
-  setupDragDrop();
-}
-
-function buildPickedRow(data: PickedElement, removeAction: string): string {
-  const cat = data.category.replace("Ifc", "Ifc​");
+function buildPickedTable(el: PickedElement, removeAction: string): string {
   return `
     <table class="rp-table">
       <thead><tr><th>Name</th><th>IFC-Typ</th><th></th></tr></thead>
       <tbody>
         <tr>
-          <td class="rp-td-name">${esc(data.label)}</td>
-          <td class="rp-td-cat" title="${esc(data.category)}">${esc(cat)}</td>
+          <td class="rp-td-name" title="${esc(el.label)}">${esc(el.label)}</td>
+          <td class="rp-td-cat" title="${esc(el.category)}">${esc(el.category.replace("Ifc", ""))}</td>
           <td><button class="rp-x" data-action="${removeAction}">✕</button></td>
         </tr>
       </tbody>
     </table>`;
 }
 
+function buildSection1(): string {
+  const s = _rs.step1;
+
+  if (s === "confirmed") {
+    const src = _rs.source!;
+    return `
+      <div class="rp-section rp-section--confirmed">
+        <div class="rp-section-title">
+          <span class="rp-dot rp-dot--done">✓</span>① QUELLE
+          <button class="rp-edit-btn" data-action="edit-step" data-step="1" title="Schritt bearbeiten">✎</button>
+        </div>
+        <div class="rp-section-compact">
+          <span class="rp-compact-name">${esc(src.label)}</span>
+          <span class="rp-compact-cat">${esc(src.category)}</span>
+        </div>
+      </div>`;
+  }
+
+  if (s === "inactive") {
+    return `
+      <div class="rp-section rp-section--inactive">
+        <div class="rp-section-title">
+          <span class="rp-dot">○</span>① QUELLE
+        </div>
+        <div class="rp-section-locked">Wird aktiv nach Start</div>
+      </div>`;
+  }
+
+  // editing
+  const hasSrc = _rs.source !== null;
+  return `
+    <div class="rp-section rp-section--active">
+      <div class="rp-section-title">
+        <span class="rp-dot rp-dot--active">●</span>① QUELLE
+      </div>
+      <div class="rp-section-body">
+        ${hasSrc
+          ? buildPickedTable(_rs.source!, "remove-source")
+          : '<div class="rp-placeholder">Klicke ein Element im Viewer<br><span class="rp-ph-sub">Schaltschrank, Trafo oder beliebig</span></div>'}
+        <button class="rp-ok-btn${hasSrc ? "" : " rp-ok-btn--disabled"}"
+          data-action="ok-step1" ${hasSrc ? "" : "disabled"}>
+          OK →
+        </button>
+      </div>
+    </div>`;
+}
+
+function buildRouteRows(): string {
+  if (_rs.route.length === 0) return "";
+  const total = Math.round(_rs.route.reduce((s, e) => s + e.length, 0) * 10) / 10;
+  const rows = _rs.route.map((e, i) => `
+    <div class="rp-trasse-row" draggable="true" data-idx="${i}">
+      <span class="rp-drag-handle" title="Ziehen zum Sortieren">⠿</span>
+      <span class="rp-td-name" title="${esc(e.label)}">${esc(e.label)}</span>
+      <span class="rp-td-cat">${esc(e.category.replace("Ifc", ""))}</span>
+      <span class="rp-td-len">${e.length > 0 ? e.length + "m" : "—"}</span>
+      <button class="rp-x" data-action="remove-route" data-idx="${i}">✕</button>
+    </div>`).join("");
+  return `
+    <div class="rp-trasse-list" id="rp-trasse-list">${rows}</div>
+    <div class="rp-trasse-total">
+      <span>TOTAL</span><span></span><span></span>
+      <span>${total > 0 ? total + "m" : "—"}</span><span></span>
+    </div>`;
+}
+
+function buildSection2(): string {
+  const s = _rs.step2;
+
+  if (s === "confirmed") {
+    const total = Math.round(_rs.route.reduce((acc, e) => acc + e.length, 0) * 10) / 10;
+    return `
+      <div class="rp-section rp-section--confirmed">
+        <div class="rp-section-title">
+          <span class="rp-dot rp-dot--done">✓</span>② KABELWEG
+          <span class="rp-count">${_rs.route.length} Element${_rs.route.length !== 1 ? "e" : ""}${total > 0 ? " · " + total + "m" : ""}</span>
+          <button class="rp-edit-btn" data-action="edit-step" data-step="2" title="Schritt bearbeiten">✎</button>
+        </div>
+      </div>`;
+  }
+
+  if (s === "inactive") {
+    return `
+      <div class="rp-section rp-section--inactive">
+        <div class="rp-section-title">
+          <span class="rp-dot">○</span>② KABELWEG
+        </div>
+        <div class="rp-section-locked">Wird aktiv nach Schritt 1</div>
+      </div>`;
+  }
+
+  // editing
+  const hasRoute = _rs.route.length > 0;
+  return `
+    <div class="rp-section rp-section--active">
+      <div class="rp-section-title">
+        <span class="rp-dot rp-dot--active">●</span>② KABELWEG
+        ${hasRoute ? `<span class="rp-count">${_rs.route.length} gewählt</span>` : ""}
+      </div>
+      <div class="rp-section-body">
+        ${!hasRoute
+          ? `<div class="rp-placeholder">Klicke Elemente im Viewer<br>
+             <span class="rp-ph-sub">Mehrfachauswahl · beliebige IFC-Elemente</span></div>`
+          : ""}
+        ${buildRouteRows()}
+        ${hasRoute
+          ? `<div class="rp-drag-hint">Zeilen verschiebbar per Drag &amp; Drop</div>`
+          : ""}
+        <button class="rp-ok-btn${hasRoute ? "" : " rp-ok-btn--disabled"}"
+          data-action="ok-step2" ${hasRoute ? "" : "disabled"}>
+          OK →
+        </button>
+      </div>
+    </div>`;
+}
+
+function buildSection3(): string {
+  const s = _rs.step3;
+
+  if (s === "confirmed") {
+    const tgt = _rs.target!;
+    return `
+      <div class="rp-section rp-section--confirmed">
+        <div class="rp-section-title">
+          <span class="rp-dot rp-dot--done">✓</span>③ ZIEL
+          <button class="rp-edit-btn" data-action="edit-step" data-step="3" title="Schritt bearbeiten">✎</button>
+        </div>
+        <div class="rp-section-compact">
+          <span class="rp-compact-name">${esc(tgt.label)}</span>
+          <span class="rp-compact-cat">${esc(tgt.category)}</span>
+        </div>
+      </div>`;
+  }
+
+  if (s === "inactive") {
+    return `
+      <div class="rp-section rp-section--inactive">
+        <div class="rp-section-title">
+          <span class="rp-dot">○</span>③ ZIEL
+        </div>
+        <div class="rp-section-locked">Wird aktiv nach Schritt 2</div>
+      </div>`;
+  }
+
+  // editing
+  const hasTgt = _rs.target !== null;
+  return `
+    <div class="rp-section rp-section--active">
+      <div class="rp-section-title">
+        <span class="rp-dot rp-dot--active">●</span>③ ZIEL
+      </div>
+      <div class="rp-section-body">
+        ${hasTgt
+          ? buildPickedTable(_rs.target!, "remove-target")
+          : '<div class="rp-placeholder">Klicke ein Element im Viewer<br><span class="rp-ph-sub">Darf nicht dasselbe wie die Quelle sein</span></div>'}
+        <button class="rp-ok-btn${hasTgt ? "" : " rp-ok-btn--disabled"}"
+          data-action="ok-step3" ${hasTgt ? "" : "disabled"}>
+          OK →
+        </button>
+      </div>
+    </div>`;
+}
+
+function buildSummary(): string {
+  if (!allConfirmed()) return "";
+  const routeCount = _rs.route.length;
+  const routeTotal = Math.round(_rs.route.reduce((s, e) => s + e.length, 0) * 10) / 10;
+  return `
+    <div class="rp-summary">
+      <div class="rp-summary-title">ZUSAMMENFASSUNG</div>
+      <div class="rp-summary-row">
+        <span>Quelle:</span>
+        <span>${esc(_rs.source!.label)} <span class="rp-ok">✓</span></span>
+      </div>
+      <div class="rp-summary-row">
+        <span>Elemente:</span>
+        <span>${routeCount} Element${routeCount !== 1 ? "e" : ""}${routeTotal > 0 ? " · " + routeTotal + "m" : ""} <span class="rp-ok">✓</span></span>
+      </div>
+      <div class="rp-summary-row">
+        <span>Ziel:</span>
+        <span>${esc(_rs.target!.label)} <span class="rp-ok">✓</span></span>
+      </div>
+    </div>`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Drag & Drop for trasse reordering
+// Main panel renderer
 // ─────────────────────────────────────────────────────────────────────────────
 
-function setupDragDrop() {
-  const rows = document.querySelectorAll<HTMLElement>(".rp-trasse-row");
-  rows.forEach((row) => {
-    row.addEventListener("dragstart", () => {
-      _dragSrcIdx = Number(row.dataset.idx);
-      row.classList.add("rp-dragging");
-    });
-    row.addEventListener("dragend", () => {
-      _dragSrcIdx = null;
-      row.classList.remove("rp-dragging");
-      document.querySelectorAll(".rp-drag-over").forEach((el) => el.classList.remove("rp-drag-over"));
-    });
-    row.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      document.querySelectorAll(".rp-drag-over").forEach((el) => el.classList.remove("rp-drag-over"));
-      row.classList.add("rp-drag-over");
-    });
-    row.addEventListener("drop", () => {
-      const destIdx = Number(row.dataset.idx);
-      if (_dragSrcIdx !== null && _dragSrcIdx !== destIdx) {
-        const moved = _trassEntries.splice(_dragSrcIdx, 1)[0];
-        _trassEntries.splice(destIdx, 0, moved);
-        renderRoutingPanel();
-        // Re-sync orange highlight to match new order
-        syncTrasseHighlight();
-      }
-    });
-  });
+function renderPanel() {
+  if (!_panel) {
+    _panel = document.createElement("div");
+    _panel.id = "rp-panel";
+    _panel.className = "rp-panel";
+    document.body.appendChild(_panel);
+  }
+
+  if (!_active || !_rs.cable) {
+    _panel.classList.remove("rp-panel--open");
+    return;
+  }
+
+  const shortType =
+    CABLE_TYPES.find((t) => t.value === _rs.cable!.type)
+      ?.label.split("—")[0].trim() ?? _rs.cable.type;
+
+  _panel.innerHTML = `
+    <div class="rp-header">
+      <div class="rp-header-title">KABELWEG DEFINIEREN</div>
+      <div class="rp-header-sub">${esc(_rs.cable.id)} · ${esc(shortType)} · ${esc(_rs.cable.voltage)}</div>
+    </div>
+    ${buildProgress()}
+    <div class="rp-body">
+      ${buildSection1()}
+      ${buildSection2()}
+      ${buildSection3()}
+      ${buildSummary()}
+    </div>
+    <div class="rp-actions">
+      ${allConfirmed()
+        ? `<button class="rp-btn-primary" data-action="create-cable">✓ Kabel erstellen</button>`
+        : `<button class="rp-btn-primary rp-btn--disabled" disabled
+            title="Bitte alle 3 Schritte abschliessen">✓ Kabel erstellen</button>`}
+      <button class="rp-btn-cancel" data-action="cancel-routing">✕ Abbrechen</button>
+    </div>`;
+
+  _panel.classList.add("rp-panel--open");
+
+  // Attach event listener only once (event delegation)
+  if (!_panelListenerAttached) {
+    _panelListenerAttached = true;
+    _panel.addEventListener("click", onPanelClick);
+  }
+
+  setupDragDrop();
+}
+
+function onPanelClick(e: Event) {
+  const btn = (e.target as Element).closest<HTMLElement>("[data-action]");
+  if (!btn) return;
+  const action = btn.dataset.action!;
+
+  if (action === "ok-step1") { okStep1(); return; }
+  if (action === "ok-step2") { okStep2(); return; }
+  if (action === "ok-step3") { okStep3(); return; }
+  if (action === "create-cable") { confirmCable(); return; }
+  if (action === "cancel-routing") { cancelRouting(); return; }
+
+  if (action === "edit-step") {
+    editStep(Number(btn.dataset.step) as 1 | 2 | 3);
+    return;
+  }
+
+  if (action === "remove-source") {
+    removeSource();
+    return;
+  }
+  if (action === "remove-target") {
+    removeTarget();
+    return;
+  }
+  if (action === "remove-route") {
+    removeRouteElement(Number(btn.dataset.idx));
+    return;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -351,43 +611,58 @@ function setupDragDrop() {
 
 async function removeSource() {
   if (!_components) return;
-  const hl = _components.get(OBF.Highlighter);
-  await hl.clear("cable-source");
-  _sourceData = null;
-  renderRoutingPanel();
-  _panelUpdate?.();
+  await _components.get(OBF.Highlighter).clear("cable-source");
+  _rs.source = null;
+  renderPanel();
 }
 
 async function removeTarget() {
   if (!_components) return;
-  const hl = _components.get(OBF.Highlighter);
-  await hl.clear("cable-target");
-  _targetData = null;
-  renderRoutingPanel();
-  _panelUpdate?.();
+  await _components.get(OBF.Highlighter).clear("cable-target");
+  _rs.target = null;
+  renderPanel();
 }
 
-async function removeTrasse(idx: number) {
-  if (!_components) return;
-  _trassEntries.splice(idx, 1);
-  await syncTrasseHighlight();
-  renderRoutingPanel();
-  _panelUpdate?.();
+async function removeRouteElement(idx: number) {
+  _rs.route.splice(idx, 1);
+  await syncRouteHighlight();
+  renderPanel();
 }
 
-async function syncTrasseHighlight() {
-  if (!_components) return;
-  const hl = _components.get(OBF.Highlighter);
-  if (_trassEntries.length === 0) {
-    await hl.clear("cable-trasse");
-    return;
-  }
-  const map: OBC.ModelIdMap = {};
-  for (const e of _trassEntries) {
-    if (!map[e.modelId]) map[e.modelId] = new Set();
-    map[e.modelId].add(e.expressId);
-  }
-  await hl.highlightByID("cable-trasse", map, false, false);
+// ─────────────────────────────────────────────────────────────────────────────
+// Drag & Drop for route element reordering
+// ─────────────────────────────────────────────────────────────────────────────
+
+function setupDragDrop() {
+  document.querySelectorAll<HTMLElement>(".rp-trasse-row").forEach((row) => {
+    row.addEventListener("dragstart", () => {
+      _dragSrcIdx = Number(row.dataset.idx);
+      row.classList.add("rp-dragging");
+    });
+    row.addEventListener("dragend", () => {
+      _dragSrcIdx = null;
+      row.classList.remove("rp-dragging");
+      document.querySelectorAll(".rp-drag-over").forEach((el) =>
+        el.classList.remove("rp-drag-over")
+      );
+    });
+    row.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      document.querySelectorAll(".rp-drag-over").forEach((el) =>
+        el.classList.remove("rp-drag-over")
+      );
+      row.classList.add("rp-drag-over");
+    });
+    row.addEventListener("drop", () => {
+      const dest = Number(row.dataset.idx);
+      if (_dragSrcIdx !== null && _dragSrcIdx !== dest) {
+        const moved = _rs.route.splice(_dragSrcIdx, 1)[0];
+        _rs.route.splice(dest, 0, moved);
+        renderPanel();
+        syncRouteHighlight();
+      }
+    });
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -423,91 +698,7 @@ function showError(msg: string) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Cancel / Confirm
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function cancelRouting() {
-  if (!_components) return;
-  const hl = _components.get(OBF.Highlighter);
-  _active = false;
-  if (_cable) {
-    const idx = cableRegistry.indexOf(_cable);
-    if (idx !== -1) cableRegistry.splice(idx, 1);
-    _cable = null;
-  }
-  _sourceData = null;
-  _targetData = null;
-  _trassEntries = [];
-  await hl.clear("cable-source");
-  await hl.clear("cable-trasse");
-  await hl.clear("cable-target");
-  renderRoutingPanel();
-  hideTooltip();
-  _panelUpdate?.();
-}
-
-function confirmRouting() {
-  if (!_cable || !_sourceData || !_targetData || !_world) return;
-
-  // Write routing data into cable object
-  _cable.sourceModelId = _sourceData.modelId;
-  _cable.sourceExpressId = _sourceData.expressId;
-  _cable.sourceLabel = _sourceData.label;
-  _cable.targetModelId = _targetData.modelId;
-  _cable.targetExpressId = _targetData.expressId;
-  _cable.targetLabel = _targetData.label;
-  _cable.trassIds = _trassEntries.map((e) => ({ modelId: e.modelId, expressId: e.expressId }));
-  _cable.status = "geplant";
-
-  // Build 3D line points
-  const pts: THREE.Vector3[] = [_sourceData.point, ..._trassEntries.map((e) => e.point), _targetData.point];
-  _cable.length = totalLineLength();
-  drawCableLine(_world, _cable, pts);
-
-  // Clean up routing state (highlights stay as cable color)
-  _active = false;
-  _cable = null;
-  _sourceData = null;
-  _targetData = null;
-  _trassEntries = [];
-
-  if (_components) {
-    const hl = _components.get(OBF.Highlighter);
-    hl.clear("cable-source");
-    hl.clear("cable-trasse");
-    hl.clear("cable-target");
-  }
-
-  renderRoutingPanel();
-  hideTooltip();
-  _panelUpdate?.();
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Three.js line
-// ─────────────────────────────────────────────────────────────────────────────
-
-function drawCableLine(world: OBC.World, cable: Cable, pts: THREE.Vector3[]) {
-  if (pts.length < 2) return;
-  const line = new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints(pts),
-    new THREE.LineBasicMaterial({ color: new THREE.Color(cable.color), depthTest: false })
-  );
-  line.renderOrder = 999;
-  line.name = `cable-line-${cable.id}`;
-  world.scene.three.add(line);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Utility
-// ─────────────────────────────────────────────────────────────────────────────
-
-function esc(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// One-time routing setup
+// One-time setup: highlights, event wiring
 // ─────────────────────────────────────────────────────────────────────────────
 
 function setupRouting(state: CablesPanelState) {
@@ -515,36 +706,35 @@ function setupRouting(state: CablesPanelState) {
   _components = components;
   _world = world;
 
-  const highlighter = components.get(OBF.Highlighter);
+  const hl = components.get(OBF.Highlighter);
   const fragments = components.get(OBC.FragmentsManager);
   const raycaster = components.get(OBC.Raycasters).get(world);
 
-  // Register highlight styles (also creates highlighter.events[name])
-  highlighter.styles.set("cable-source", {
+  // Register highlight styles (side effect: creates hl.events[name])
+  hl.styles.set("cable-source", {
     color: new THREE.Color("#ff4455"),
     renderedFaces: FRAGS.RenderedFaces.ONE,
     opacity: 1, transparent: false,
   });
-  highlighter.styles.set("cable-trasse", {
+  hl.styles.set("cable-route", {
     color: new THREE.Color("#ffaa00"),
     renderedFaces: FRAGS.RenderedFaces.ONE,
     opacity: 1, transparent: false,
   });
-  highlighter.styles.set("cable-target", {
+  hl.styles.set("cable-target", {
     color: new THREE.Color("#00e67a"),
     renderedFaces: FRAGS.RenderedFaces.ONE,
     opacity: 1, transparent: false,
   });
-  // null style = no visual effect but creates the events entry
-  highlighter.styles.set("cable-hover", null);
+  hl.styles.set("cable-hover", null); // no visual, but creates hl.events["cable-hover"]
 
-  // Track mouse
+  // Mouse tracking
   document.addEventListener("pointermove", (e) => {
     _mouseX = e.clientX;
     _mouseY = e.clientY;
   });
 
-  // Capture ray point on click (capture phase = before highlighter bubble)
+  // Capture ray point before highlighter bubble handler
   const canvas = world.renderer?.three.domElement;
   if (canvas) {
     canvas.addEventListener("click", async () => {
@@ -554,7 +744,7 @@ function setupRouting(state: CablesPanelState) {
     }, true);
   }
 
-  // ── Hover tooltip ──────────────────────────────────────────────────────────
+  // ── Hover tooltip ────────────────────────────────────────────────────────
   let _hoverTimer: ReturnType<typeof setTimeout> | null = null;
   if (canvas) {
     canvas.addEventListener("pointermove", () => {
@@ -562,108 +752,97 @@ function setupRouting(state: CablesPanelState) {
       if (_hoverTimer) clearTimeout(_hoverTimer);
       _hoverTimer = setTimeout(async () => {
         if (!_active) return;
-        try { await highlighter.highlight("cable-hover", true, false); } catch { hideTooltip(); }
+        try { await hl.highlight("cable-hover", true, false); }
+        catch { hideTooltip(); }
       }, 60);
     });
     canvas.addEventListener("mouseleave", () => hideTooltip());
   }
 
-  highlighter.events["cable-hover"].onHighlight.add(async (modelIdMap) => {
+  hl.events["cable-hover"].onHighlight.add(async (modelIdMap) => {
     if (!_active) return;
     const entry = Object.entries(modelIdMap)[0];
     if (!entry) return;
-    const [modelId, expressIds] = entry;
+    const [, expressIds] = entry;
     const expressId = [...expressIds][0];
     if (expressId == null) return;
+    await hl.clear("cable-hover");
 
-    const cat = await getCategory(fragments, modelId, expressId);
-    await highlighter.clear("cable-hover");
-
-    if (isSource(cat)) {
-      if (!_sourceData) {
-        showTooltip("Als Quelle wählen");
-      } else if (_sourceData.expressId === expressId) {
-        showTooltip("Quelle bereits gewählt");
+    const step = editingStep();
+    if (step === 1) {
+      showTooltip("Als Quelle wählen");
+    } else if (step === 2) {
+      const already = _rs.route.some((e) => e.expressId === expressId);
+      showTooltip(already ? "Entfernen" : "Zum Kabelweg hinzufügen");
+    } else if (step === 3) {
+      if (_rs.source?.expressId === expressId) {
+        showTooltip("Bereits als Quelle gewählt");
       } else {
         showTooltip("Als Ziel wählen");
       }
-    } else if (isTrasse(cat)) {
-      const already = _trassEntries.some((e) => e.expressId === expressId);
-      showTooltip(already ? "Entfernen" : "Zur Route hinzufügen");
     } else {
-      showTooltip("Dieses Element kann nicht gewählt werden");
+      hideTooltip();
     }
   });
 
-  highlighter.events["cable-hover"].onClear.add(() => hideTooltip());
+  hl.events["cable-hover"].onClear.add(() => hideTooltip());
 
-  // ── Select / click handler ─────────────────────────────────────────────────
-  highlighter.events.select.onHighlight.add(async (modelIdMap) => {
-    if (!_active || !_cable) return;
+  // ── Viewer click → routing ───────────────────────────────────────────────
+  hl.events.select.onHighlight.add(async (modelIdMap) => {
+    if (!_active) return;
+    const step = editingStep();
+    if (step === null) return; // all steps confirmed, no interaction
 
     const entry = Object.entries(modelIdMap)[0];
     if (!entry) return;
     const [modelId, expressIds] = entry;
     const expressId = [...expressIds][0];
     if (expressId == null) return;
+    await hl.clear("select");
 
-    const cat = await getCategory(fragments, modelId, expressId);
     const pt = _lastRayPoint?.clone() ?? new THREE.Vector3();
-    await highlighter.clear("select");
 
-    if (isSource(cat)) {
-      if (!_sourceData) {
-        // Set as source
-        const label = await getElementLabel(fragments, modelId, expressId);
-        _sourceData = { modelId, expressId, point: pt, label, category: cat ?? "IfcUnknown" };
-        await highlighter.highlightByID("cable-source", { [modelId]: new Set([expressId]) }, false, false);
-      } else if (_sourceData.expressId === expressId) {
-        // Clicked again → deselect source
-        await removeSource();
-        return;
-      } else if (!_targetData) {
-        // Source set, no target yet → set as target
-        if (_sourceData.expressId === expressId) {
-          showError("Quelle und Ziel müssen verschieden sein");
-          return;
-        }
-        const label = await getElementLabel(fragments, modelId, expressId);
-        _targetData = { modelId, expressId, point: pt, label, category: cat ?? "IfcUnknown" };
-        await highlighter.highlightByID("cable-target", { [modelId]: new Set([expressId]) }, false, false);
-      } else if (_targetData.expressId === expressId) {
-        // Clicked again → deselect target
-        await removeTarget();
-        return;
-      } else {
-        // Replace target
-        const label = await getElementLabel(fragments, modelId, expressId);
-        await highlighter.clear("cable-target");
-        _targetData = { modelId, expressId, point: pt, label, category: cat ?? "IfcUnknown" };
-        await highlighter.highlightByID("cable-target", { [modelId]: new Set([expressId]) }, false, false);
-      }
-    } else if (isTrasse(cat)) {
-      const idx = _trassEntries.findIndex((e) => e.expressId === expressId);
+    if (step === 1) {
+      // Replace current source selection
+      await hl.clear("cable-source");
+      const label = await getElementLabel(fragments, modelId, expressId);
+      const category = await getCategory(fragments, modelId, expressId);
+      _rs.source = { modelId, expressId, point: pt, label, category };
+      await hl.highlightByID("cable-source", { [modelId]: new Set([expressId]) }, false, false);
+      renderPanel();
+      _panelUpdate?.();
+    } else if (step === 2) {
+      // Toggle route element
+      const idx = _rs.route.findIndex((e) => e.expressId === expressId);
       if (idx !== -1) {
-        // Toggle off
-        _trassEntries.splice(idx, 1);
+        _rs.route.splice(idx, 1);
       } else {
-        // Add - start with placeholder length, load async
         const label = await getElementLabel(fragments, modelId, expressId);
-        _trassEntries.push({ modelId, expressId, point: pt, label, length: 0 });
-        // Load length asynchronously and re-render
+        const category = await getCategory(fragments, modelId, expressId);
+        _rs.route.push({ modelId, expressId, point: pt, label, category, length: 0 });
+        // Load length async, re-render when done
         getElementLength(components, modelId, expressId).then((len) => {
-          const entry = _trassEntries.find((e) => e.expressId === expressId);
-          if (entry) { entry.length = len; renderRoutingPanel(); }
+          const el = _rs.route.find((e) => e.expressId === expressId);
+          if (el) { el.length = len; renderPanel(); }
         });
       }
-      await syncTrasseHighlight();
-    } else {
-      showError("Dieses Element kann nicht gewählt werden");
-      return;
+      await syncRouteHighlight();
+      renderPanel();
+      _panelUpdate?.();
+    } else if (step === 3) {
+      // Validate: not the same as source
+      if (_rs.source?.expressId === expressId) {
+        showError("Quelle und Ziel müssen verschieden sein");
+        return;
+      }
+      await hl.clear("cable-target");
+      const label = await getElementLabel(fragments, modelId, expressId);
+      const category = await getCategory(fragments, modelId, expressId);
+      _rs.target = { modelId, expressId, point: pt, label, category };
+      await hl.highlightByID("cable-target", { [modelId]: new Set([expressId]) }, false, false);
+      renderPanel();
+      _panelUpdate?.();
     }
-
-    renderRoutingPanel();
-    _panelUpdate?.();
   });
 }
 
@@ -723,7 +902,7 @@ function openModal(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Cable list entry
+// Cable list entry (in the sidebar panel)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function renderCableEntry(cable: Cable) {
@@ -745,7 +924,7 @@ function renderCableEntry(cable: Cable) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Exported panel template
+// Exported BUI panel template (the sidebar section in the grid)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const cablesPanelTemplate: BUI.StatefullComponent<CablesPanelState> = (
@@ -769,18 +948,12 @@ export const cablesPanelTemplate: BUI.StatefullComponent<CablesPanelState> = (
         name, type, typeLabel, circuit, voltage,
         sourceModelId: "", sourceExpressId: -1, sourceLabel: "",
         targetModelId: "", targetExpressId: -1, targetLabel: "",
-        trassIds: [],
-        status: "in Bearbeitung",
-        color: getNextColor(),
-        length: 0,
+        trassIds: [], status: "in Bearbeitung",
+        color: getNextColor(), length: 0,
       };
       cableRegistry.push(cable);
-      _active = true;
-      _cable = cable;
-      _sourceData = null;
-      _targetData = null;
-      _trassEntries = [];
-      renderRoutingPanel();
+      startRouting(cable);
+      renderPanel();
       update();
     });
   };
