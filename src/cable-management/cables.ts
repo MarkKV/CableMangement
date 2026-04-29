@@ -45,3 +45,14 @@ export const nextCableId = () =>
 
 export const getNextColor = () =>
   CABLE_COLORS[cableRegistry.length % CABLE_COLORS.length];
+
+// ── Change notification (toolbar count, window refresh) ───────────────────
+const _changeListeners: Array<() => void> = [];
+
+export function addCableChangeListener(fn: () => void): void {
+  if (!_changeListeners.includes(fn)) _changeListeners.push(fn);
+}
+
+export function notifyCableChange(): void {
+  for (const fn of _changeListeners) fn();
+}

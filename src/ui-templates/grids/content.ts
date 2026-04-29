@@ -6,30 +6,14 @@ import {
   CONTENT_GRID_ID,
   SMALL_COLUMN_WIDTH,
 } from "../../globals";
-import {
-  cablesPanelTemplate,
-  CablesPanelState,
-} from "../../cable-management/cable-panel";
 
 type Viewer = "viewer";
+type Models    = { name: "models";      state: TEMPLATES.ModelsPanelState };
+type ElementData = { name: "elementData"; state: TEMPLATES.ElementsDataPanelState };
+type Viewpoints  = { name: "viewpoints"; state: TEMPLATES.ViewpointsPanelState };
 
-type Models = {
-  name: "models";
-  state: TEMPLATES.ModelsPanelState;
-};
-
-type ElementData = {
-  name: "elementData";
-  state: TEMPLATES.ElementsDataPanelState;
-};
-
-type Viewpoints = { name: "viewpoints"; state: TEMPLATES.ViewpointsPanelState };
-
-type Cables = { name: "cables"; state: CablesPanelState };
-
-export type ContentGridElements = [Viewer, Models, ElementData, Viewpoints, Cables];
-
-export type ContentGridLayouts = ["Viewer"];
+export type ContentGridElements = [Viewer, Models, ElementData, Viewpoints];
+export type ContentGridLayouts  = ["Viewer"];
 
 export interface ContentGridState {
   components: OBC.Components;
@@ -41,7 +25,7 @@ export interface ContentGridState {
 export const contentGridTemplate: BUI.StatefullComponent<ContentGridState> = (
   state,
 ) => {
-  const { components, world } = state;
+  const { components } = state;
 
   const onCreated = (e?: Element) => {
     if (!e) return;
@@ -60,18 +44,15 @@ export const contentGridTemplate: BUI.StatefullComponent<ContentGridState> = (
         template: TEMPLATES.viewpointsPanelTemplate,
         initialState: { components },
       },
-      cables: {
-        template: cablesPanelTemplate,
-        initialState: { components, world },
-      },
       viewer: state.viewportTemplate,
     };
 
+    // elementData spans both rows — original layout
     grid.layouts = {
       Viewer: {
         template: `
           "models viewer elementData" 1fr
-          "viewpoints viewer cables" 1fr
+          "viewpoints viewer elementData" 1fr
           /${SMALL_COLUMN_WIDTH} 1fr ${SMALL_COLUMN_WIDTH}
         `,
       },
@@ -88,6 +69,5 @@ export const getContentGrid = () => {
     ContentGridLayouts,
     ContentGridElements
   > | null;
-
   return contentGrid;
 };

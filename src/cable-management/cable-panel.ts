@@ -10,6 +10,7 @@ import {
   getNextColor,
   CABLE_TYPES,
   VOLTAGE_OPTIONS,
+  notifyCableChange,
 } from "./cables";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -171,6 +172,7 @@ async function cancelRouting() {
   await hl.clear("cable-target");
   renderPanel();
   hideTooltip();
+  notifyCableChange();
   _panelUpdate?.();
 }
 
@@ -269,6 +271,7 @@ function confirmCable() {
   _rs = makeEmptyState();
   renderPanel();
   hideTooltip();
+  notifyCableChange();
   _panelUpdate?.();
 }
 
@@ -902,7 +905,46 @@ function openModal(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Cable list entry (in the sidebar panel)
+// Public exports for toolbar / main.ts
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface CableRoutingState {
+  components: OBC.Components;
+  world: OBC.World;
+}
+
+/** Call once from main.ts to set up routing event wiring. */
+export function initCableRouting(state: CablesPanelState): void {
+  if (!_initialized) {
+    _initialized = true;
+    try {
+      setupRouting(state);
+    } catch (err) {
+      console.error("[CablePanel] setupRouting failed:", err);
+    }
+  }
+}
+
+/** Call from toolbar "+ Neues Kabel" button. */
+export function openNewCableModal(): void {
+  openModal(({ name, type, typeLabel, circuit, voltage }) => {
+    const cable: Cable = {
+      id: nextCableId(),
+      name, type, typeLabel, circuit, voltage,
+      sourceModelId: "", sourceExpressId: -1, sourceLabel: "",
+      targetModelId: "", targetExpressId: -1, targetLabel: "",
+      trassIds: [], status: "in Bearbeitung",
+      color: getNextColor(), length: 0,
+    };
+    cableRegistry.push(cable);
+    startRouting(cable);
+    renderPanel();
+    notifyCableChange();
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cable list entry (legacy, kept for reference)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function renderCableEntry(cable: Cable) {

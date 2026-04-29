@@ -4,6 +4,9 @@ import * as OBF from "@thatopen/components-front";
 import * as FRAGS from "@thatopen/fragments";
 import * as THREE from "three";
 import { appIcons, tooltips } from "../../globals";
+import { cableRegistry, addCableChangeListener } from "../../cable-management/cables";
+import { openNewCableModal } from "../../cable-management/cable-panel";
+import { openCableWindow } from "../../cable-management/cable-list-window";
 
 export interface ViewerToolbarState {
   components: OBC.Components;
@@ -21,7 +24,6 @@ const setModelTransparent = (components: OBC.Components) => {
   const materials = [...fragments.core.models.materials.list.values()];
   for (const material of materials) {
     if (material.userData.customId) continue;
-    // save colors
     let color: number | undefined;
     if ("color" in material) {
       color = material.color.getHex();
@@ -35,7 +37,6 @@ const setModelTransparent = (components: OBC.Components) => {
       opacity: material.opacity,
     });
 
-    // set color
     material.transparent = true;
     material.opacity = 0.05;
     material.needsUpdate = true;
@@ -62,10 +63,19 @@ const restoreModelMaterials = () => {
   originalColors.clear();
 };
 
+// Track toolbar update function for cable count re-renders
+let _toolbarUpdate: (() => void) | null = null;
+
 export const viewerToolbarTemplate: BUI.StatefullComponent<
   ViewerToolbarState
-> = (state) => {
+> = (state, update) => {
   const { components, world } = state;
+
+  // Register once so notifyCableChange() re-renders the toolbar
+  if (!_toolbarUpdate) {
+    _toolbarUpdate = update;
+    addCableChangeListener(update);
+  }
 
   const highlighter = components.get(OBF.Highlighter);
   const hider = components.get(OBC.Hider);
@@ -154,15 +164,20 @@ export const viewerToolbarTemplate: BUI.StatefullComponent<
     target.loading = false;
   };
 
+  // Cable toolbar handlers
+  const count = cableRegistry.length;
+  const onNewCable = () => openNewCableModal();
+  const onOpenList = () => openCableWindow(components, world);
+
   return BUI.html`
     <bim-toolbar>
       <bim-toolbar-section label="Visibility" icon=${appIcons.SHOW}>
-        <bim-button tooltip-title=${tooltips.SHOW_ALL.TITLE} tooltip-text=${tooltips.SHOW_ALL.TEXT} icon=${appIcons.SHOW} label="Show All" @click=${onShowAll}></bim-button> 
+        <bim-button tooltip-title=${tooltips.SHOW_ALL.TITLE} tooltip-text=${tooltips.SHOW_ALL.TEXT} icon=${appIcons.SHOW} label="Show All" @click=${onShowAll}></bim-button>
         <bim-button tooltip-title=${tooltips.GHOST.TITLE} tooltip-text=${tooltips.GHOST.TEXT} icon=${appIcons.TRANSPARENT} label="Toggle Ghost" @click=${onToggleGhost}></bim-button>
-      </bim-toolbar-section> 
+      </bim-toolbar-section>
       <bim-toolbar-section label="Selection" icon=${appIcons.SELECT}>
         ${focusBtn}
-        <bim-button tooltip-title=${tooltips.HIDE.TITLE} tooltip-text=${tooltips.HIDE.TEXT} icon=${appIcons.HIDE} label="Hide" @click=${onHide}></bim-button> 
+        <bim-button tooltip-title=${tooltips.HIDE.TITLE} tooltip-text=${tooltips.HIDE.TEXT} icon=${appIcons.HIDE} label="Hide" @click=${onHide}></bim-button>
         <bim-button tooltip-title=${tooltips.ISOLATE.TITLE} tooltip-text=${tooltips.ISOLATE.TEXT} icon=${appIcons.ISOLATE} label="Isolate" @click=${onIsolate}></bim-button>
         <bim-button icon=${appIcons.COLORIZE} label="Colorize">
           <bim-context-menu>
@@ -172,7 +187,19 @@ export const viewerToolbarTemplate: BUI.StatefullComponent<
             </div>
           </bim-context-menu>
         </bim-button>
-      </bim-toolbar-section> 
+      </bim-toolbar-section>
+      <bim-toolbar-section label="Kabel" icon="material-symbols:cable">
+        <bim-button icon="mdi:plus" label="Neues Kabel" @click=${onNewCable}
+          tooltip-title="Neues Kabel anlegen"
+          tooltip-text="Routing-Assistent starten: Quelle, Kabelweg und Ziel im Modell wählen.">
+        </bim-button>
+        <bim-button icon="mdi:format-list-bulleted"
+          label=${"Erstellte Kabel (" + count + ")"}
+          @click=${onOpenList}
+          tooltip-title="Kabelliste öffnen"
+          tooltip-text="Alle erstellten Kabel anzeigen, im Modell highlighten oder löschen.">
+        </bim-button>
+      </bim-toolbar-section>
     </bim-toolbar>
   `;
 };

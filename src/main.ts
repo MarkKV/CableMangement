@@ -5,6 +5,7 @@ import * as BUI from "@thatopen/ui";
 import * as TEMPLATES from "./ui-templates";
 import { appIcons, CONTENT_GRID_ID } from "./globals";
 import { viewportSettingsTemplate } from "./ui-templates/buttons/viewport-settings";
+import { initCableRouting } from "./cable-management/cable-panel";
 
 BUI.Manager.init();
 
@@ -255,6 +256,9 @@ const [contentGrid] = BUI.Component.create<
   id: CONTENT_GRID_ID,
   viewportTemplate: viewportCardTemplate,
 });
+
+// Initialize cable routing (highlight styles, event wiring)
+initCableRouting({ components, world });
 
 const setInitialLayout = () => {
   if (window.location.hash) {
