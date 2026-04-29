@@ -141,6 +141,156 @@ async function getElementLength(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Schritt 2: Bounding Box eines IFC-Elements
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Gibt die 3D-BoundingBox (THREE.Box3) eines Elements zurück.
+ * Fallback: null wenn das Element keine Geometrie hat.
+ */
+async function getElementBBox(
+  components: OBC.Components,
+  modelId: string,
+  expressId: number
+): Promise<THREE.Box3 | null> {
+  try {
+    const boxer = components.get(OBC.BoundingBoxer);
+    boxer.list.clear();
+    await boxer.addFromModelIdMap({ [modelId]: new Set([expressId]) });
+    const box = boxer.get();
+    boxer.list.clear();
+    // Eine leere Box hat min > max — ungültig zurückgeben
+    if (box.isEmpty()) return null;
+    return box;
+  } catch {
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Schritt 3: Kandidaten-Punkte und nächster Verbindungspunkt
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Berechnet 15 Kandidaten-Punkte auf einer BoundingBox:
+ * 1 Mittelpunkt + 8 Eckpunkte + 6 Flächenmittelpunkte.
+ */
+function getCandidatePoints(box: THREE.Box3): THREE.Vector3[] {
+  const { min, max } = box;
+  const cx = (min.x + max.x) / 2;
+  const cy = (min.y + max.y) / 2;
+  const cz = (min.z + max.z) / 2;
+  return [
+    new THREE.Vector3(cx,    cy,    cz   ), // Mittelpunkt
+    new THREE.Vector3(min.x, min.y, min.z), // Ecken
+    new THREE.Vector3(max.x, min.y, min.z),
+    new THREE.Vector3(min.x, max.y, min.z),
+    new THREE.Vector3(max.x, max.y, min.z),
+    new THREE.Vector3(min.x, min.y, max.z),
+    new THREE.Vector3(max.x, min.y, max.z),
+    new THREE.Vector3(min.x, max.y, max.z),
+    new THREE.Vector3(max.x, max.y, max.z),
+    new THREE.Vector3(cx,    max.y, cz   ), // Fläche oben
+    new THREE.Vector3(cx,    min.y, cz   ), // Fläche unten
+    new THREE.Vector3(min.x, cy,    cz   ), // Fläche links
+    new THREE.Vector3(max.x, cy,    cz   ), // Fläche rechts
+    new THREE.Vector3(cx,    cy,    min.z), // Fläche vorne
+    new THREE.Vector3(cx,    cy,    max.z), // Fläche hinten
+  ];
+}
+
+/**
+ * Findet den Kandidaten-Punkt auf `toBox` der dem `fromPoint` am nächsten liegt.
+ */
+function getNearestPoint(
+  fromPoint: THREE.Vector3,
+  toBox: THREE.Box3
+): THREE.Vector3 {
+  const candidates = getCandidatePoints(toBox);
+  let nearest = candidates[0];
+  let minDist = fromPoint.distanceTo(nearest);
+  for (let i = 1; i < candidates.length; i++) {
+    const d = fromPoint.distanceTo(candidates[i]);
+    if (d < minDist) { minDist = d; nearest = candidates[i]; }
+  }
+  return nearest.clone();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Schritt 4: Optimale Linienpunkte für den gesamten Kabelweg
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Berechnet für jeden Abschnitt des Kabelwegs den geometrisch
+ * optimalen Verbindungspunkt (Nearest-Point-Algorithmus).
+ *
+ * Ablauf:
+ *   pts[0] = Mittelpunkt der Quelle
+ *   pts[1] = nächster Punkt auf Kabelweg-Element 1 zu pts[0]
+ *   pts[2] = nächster Punkt auf Kabelweg-Element 2 zu pts[1]
+ *   ...
+ *   pts[n] = nächster Punkt auf Ziel zu pts[n-1]
+ *
+ * Fallback auf gespeicherten Klick-Punkt wenn keine BBox verfügbar.
+ */
+async function calculateRoutePoints(
+  components: OBC.Components,
+  source: PickedElement,
+  route: RouteElement[],
+  target: PickedElement
+): Promise<THREE.Vector3[]> {
+  const all = [source, ...route, target];
+  const boxes: (THREE.Box3 | null)[] = await Promise.all(
+    all.map((el) => getElementBBox(components, el.modelId, el.expressId))
+  );
+
+  const pts: THREE.Vector3[] = [];
+
+  for (let i = 0; i < all.length; i++) {
+    const box = boxes[i];
+    if (!box) {
+      // Kein BBox → Klick-Position als Fallback
+      pts.push(all[i].point.clone());
+      continue;
+    }
+
+    if (i === 0) {
+      // Quelle: Startpunkt = Mittelpunkt
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      pts.push(center);
+    } else {
+      // Alle weiteren: nächster Punkt zum vorherigen Punkt
+      pts.push(getNearestPoint(pts[pts.length - 1], box));
+    }
+  }
+
+  return pts;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Schritt 7: Debug-Visualisierung (rote Kugeln an jedem Linienpunkt)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Zeichnet kleine rote Kugeln an jedem berechneten Linienpunkt.
+ * Aktivieren: window.debugCableRouting = true  (in der Browser-Konsole)
+ * Deaktivieren: window.debugCableRouting = false
+ */
+function drawDebugSpheres(world: OBC.World, pts: THREE.Vector3[], cableId: string) {
+  const group = new THREE.Group();
+  group.name = `cable-debug-${cableId}`;
+  const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false });
+  for (const pt of pts) {
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), mat);
+    mesh.position.copy(pt);
+    mesh.renderOrder = 1000;
+    group.add(mesh);
+  }
+  world.scene.three.add(group);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Routing state transitions
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -226,29 +376,33 @@ function allConfirmed(): boolean {
   return _rs.step1 === "confirmed" && _rs.step2 === "confirmed" && _rs.step3 === "confirmed";
 }
 
-function confirmCable() {
-  if (!_rs.cable || !_rs.source || !_rs.target || !_world) return;
+async function confirmCable() {
+  if (!_rs.cable || !_rs.source || !_rs.target || !_world || !_components) return;
 
   const c = _rs.cable;
-  c.sourceModelId = _rs.source.modelId;
+  c.sourceModelId   = _rs.source.modelId;
   c.sourceExpressId = _rs.source.expressId;
-  c.sourceLabel = _rs.source.label;
-  c.targetModelId = _rs.target.modelId;
+  c.sourceLabel     = _rs.source.label;
+  c.targetModelId   = _rs.target.modelId;
   c.targetExpressId = _rs.target.expressId;
-  c.targetLabel = _rs.target.label;
-  c.trassIds = _rs.route.map((e) => ({ modelId: e.modelId, expressId: e.expressId }));
+  c.targetLabel     = _rs.target.label;
+  c.trassIds        = _rs.route.map((e) => ({ modelId: e.modelId, expressId: e.expressId }));
   c.status = "geplant";
 
-  const pts: THREE.Vector3[] = [
-    _rs.source.point,
-    ..._rs.route.map((e) => e.point),
-    _rs.target.point,
-  ];
+  // ── Schritt 4: Optimierte Linienpunkte berechnen ────────────────────────
+  const pts = await calculateRoutePoints(
+    _components,
+    _rs.source,
+    _rs.route,
+    _rs.target
+  );
 
+  // ── Schritt 6: Länge aus echten 3D-Punkten ──────────────────────────────
   let d = 0;
   for (let i = 1; i < pts.length; i++) d += pts[i].distanceTo(pts[i - 1]);
   c.length = Math.round(d * 10) / 10;
 
+  // ── Schritt 5: Three.js Linie zeichnen ──────────────────────────────────
   if (pts.length >= 2) {
     const line = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints(pts),
@@ -257,15 +411,18 @@ function confirmCable() {
     line.renderOrder = 999;
     line.name = `cable-line-${c.id}`;
     _world.scene.three.add(line);
+
+    // ── Schritt 7: Debug-Kugeln (window.debugCableRouting = true aktivieren)
+    if ((window as any).debugCableRouting) {
+      drawDebugSpheres(_world, pts, c.id);
+    }
   }
 
   // Clear routing highlights
-  if (_components) {
-    const hl = _components.get(OBF.Highlighter);
-    hl.clear("cable-source");
-    hl.clear("cable-route");
-    hl.clear("cable-target");
-  }
+  const hl = _components.get(OBF.Highlighter);
+  hl.clear("cable-source");
+  hl.clear("cable-route");
+  hl.clear("cable-target");
 
   _active = false;
   _rs = makeEmptyState();
@@ -586,7 +743,7 @@ function onPanelClick(e: Event) {
   if (action === "ok-step1") { okStep1(); return; }
   if (action === "ok-step2") { okStep2(); return; }
   if (action === "ok-step3") { okStep3(); return; }
-  if (action === "create-cable") { confirmCable(); return; }
+  if (action === "create-cable") { void confirmCable(); return; }
   if (action === "cancel-routing") { cancelRouting(); return; }
 
   if (action === "edit-step") {
