@@ -168,125 +168,255 @@ async function getElementBBox(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Schritt 3: Kandidaten-Punkte und nächster Verbindungspunkt
+// Schritt 5: Steigtrassen-Erkennung
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Berechnet 15 Kandidaten-Punkte auf einer BoundingBox:
- * 1 Mittelpunkt + 8 Eckpunkte + 6 Flächenmittelpunkte.
+ * Erkennt ob ein Element eine vertikale Steigtrasse ist.
+ * Kriterium: Höhe (Y) deutlich grösser als Breite und Tiefe.
  */
-function getCandidatePoints(box: THREE.Box3): THREE.Vector3[] {
-  const { min, max } = box;
-  const cx = (min.x + max.x) / 2;
-  const cy = (min.y + max.y) / 2;
-  const cz = (min.z + max.z) / 2;
+function isSteigtrasse(box: THREE.Box3): boolean {
+  const height = box.max.y - box.min.y;
+  const width  = box.max.x - box.min.x;
+  const depth  = box.max.z - box.min.z;
+  return height > width * 2 && height > depth * 2;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Schritt 7 (Korrektur): clampToBBox
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Klemmt einen Punkt auf die BoundingBox — stellt sicher dass der Punkt
+ * auf oder innerhalb des Elements liegt (kein "Phantom-Punkt" im Leeren).
+ */
+function clampToBBox(pt: THREE.Vector3, box: THREE.Box3): THREE.Vector3 {
+  return new THREE.Vector3(
+    Math.max(box.min.x, Math.min(box.max.x, pt.x)),
+    Math.max(box.min.y, Math.min(box.max.y, pt.y)),
+    Math.max(box.min.z, Math.min(box.max.z, pt.z))
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Schritt 2: Orthogonaler Eintrittspunkt auf Element-Oberfläche
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Berechnet den Eintrittspunkt auf der Oberfläche von `toBBox`
+ * ausgehend vom letzten akkumulierten Punkt `fromPt`.
+ *
+ * Strategie (Reihenfolge der Prüfung):
+ *   1. Steigtrasse → Ober- oder Unterkante (Y-Fläche)
+ *   2. Hauptsächlich Y-Bewegung → Y-Fläche
+ *   3. Hauptsächlich X-Bewegung → X-Fläche (links/rechts)
+ *   4. Hauptsächlich Z-Bewegung → Z-Fläche (vorne/hinten)
+ *
+ * Y und Z (bzw. Y und X) des vorherigen Punkts bleiben erhalten →
+ * Eintrittspunkt hat schon die richtige Höhe/Tiefe für den Abbiegepunkt.
+ */
+function getOrthogonalConnectionPoint(
+  fromPt: THREE.Vector3,
+  toBBox: THREE.Box3
+): THREE.Vector3 {
+  const toCenter = new THREE.Vector3();
+  toBBox.getCenter(toCenter);
+
+  const dx = Math.abs(toCenter.x - fromPt.x);
+  const dy = Math.abs(toCenter.y - fromPt.y);
+  const dz = Math.abs(toCenter.z - fromPt.z);
+
+  if (isSteigtrasse(toBBox) || dy > Math.max(dx, dz)) {
+    // Vertikal — oben oder unten eintreten
+    const faceY = fromPt.y < toCenter.y ? toBBox.min.y : toBBox.max.y;
+    return new THREE.Vector3(fromPt.x, faceY, fromPt.z);
+  }
+
+  if (dx >= dz) {
+    // Hauptsächlich X → linke oder rechte Fläche
+    const faceX = fromPt.x < toCenter.x ? toBBox.min.x : toBBox.max.x;
+    return new THREE.Vector3(faceX, fromPt.y, fromPt.z);
+  } else {
+    // Hauptsächlich Z → vordere oder hintere Fläche
+    const faceZ = fromPt.z < toCenter.z ? toBBox.min.z : toBBox.max.z;
+    return new THREE.Vector3(fromPt.x, fromPt.y, faceZ);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Schritt 3: makeOrthogonalPath — Achsenparallele Zwischenpunkte
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Erzeugt einen rein orthogonalen (achsenparallelen) Pfad von A nach B.
+ * Maximal 2 Zwischenpunkte, Reihenfolge immer: erst X, dann Y, dann Z.
+ *
+ * Ergebnisformen:
+ *   2 Punkte  [A, B]:          bereits auf gleicher Achse
+ *   3 Punkte  [A, K, B]:       L-Form (kein Höhenunterschied)
+ *   4 Punkte  [A, K1, K2, B]:  U-/S-Form (mit Höhenunterschied)
+ */
+function makeOrthogonalPath(A: THREE.Vector3, B: THREE.Vector3): THREE.Vector3[] {
+  const T  = 0.1; // 10 cm Schwellwert: darunter = "gleiche Achse"
+  const dx = Math.abs(B.x - A.x);
+  const dy = Math.abs(B.y - A.y);
+  const dz = Math.abs(B.z - A.z);
+
+  // ── Gleicher Punkt oder nur eine Achse verschieden → kein Knick nötig ────
+  if (dx < T && dy < T && dz < T) return [A.clone(), B.clone()];
+  if (dy < T && dz < T)           return [A.clone(), B.clone()]; // nur X
+  if (dx < T && dz < T)           return [A.clone(), B.clone()]; // nur Y
+  if (dx < T && dy < T)           return [A.clone(), B.clone()]; // nur Z
+
+  // ── L-Form: gleiche Höhe (dy < T), horizontale Bewegung in X und Z ───────
+  // Strategie: erst X, dann Z
+  if (dy < T) {
+    return [
+      A.clone(),
+      new THREE.Vector3(B.x, A.y, A.z), // Knick: X bewegt, Z noch alt
+      B.clone(),                          // Z bewegt
+    ];
+  }
+
+  // ── U-/S-Form: Höhenunterschied → X, dann Y, dann Z ─────────────────────
   return [
-    new THREE.Vector3(cx,    cy,    cz   ), // Mittelpunkt
-    new THREE.Vector3(min.x, min.y, min.z), // Ecken
-    new THREE.Vector3(max.x, min.y, min.z),
-    new THREE.Vector3(min.x, max.y, min.z),
-    new THREE.Vector3(max.x, max.y, min.z),
-    new THREE.Vector3(min.x, min.y, max.z),
-    new THREE.Vector3(max.x, min.y, max.z),
-    new THREE.Vector3(min.x, max.y, max.z),
-    new THREE.Vector3(max.x, max.y, max.z),
-    new THREE.Vector3(cx,    max.y, cz   ), // Fläche oben
-    new THREE.Vector3(cx,    min.y, cz   ), // Fläche unten
-    new THREE.Vector3(min.x, cy,    cz   ), // Fläche links
-    new THREE.Vector3(max.x, cy,    cz   ), // Fläche rechts
-    new THREE.Vector3(cx,    cy,    min.z), // Fläche vorne
-    new THREE.Vector3(cx,    cy,    max.z), // Fläche hinten
+    A.clone(),
+    new THREE.Vector3(B.x, A.y, A.z), // Knick 1: X bewegt
+    new THREE.Vector3(B.x, B.y, A.z), // Knick 2: Y bewegt (hoch/runter)
+    B.clone(),                          // Z bewegt
   ];
 }
 
-/**
- * Findet den Kandidaten-Punkt auf `toBox` der dem `fromPoint` am nächsten liegt.
- */
-function getNearestPoint(
-  fromPoint: THREE.Vector3,
-  toBox: THREE.Box3
-): THREE.Vector3 {
-  const candidates = getCandidatePoints(toBox);
-  let nearest = candidates[0];
-  let minDist = fromPoint.distanceTo(nearest);
-  for (let i = 1; i < candidates.length; i++) {
-    const d = fromPoint.distanceTo(candidates[i]);
-    if (d < minDist) { minDist = d; nearest = candidates[i]; }
-  }
-  return nearest.clone();
+// ─────────────────────────────────────────────────────────────────────────────
+// Schritt 4: calculateRoutePoints — vollständig orthogonaler Kabelweg
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface RouteCalcResult {
+  pts:       THREE.Vector3[]; // alle Linienpunkte (für THREE.Line)
+  entryPts:  THREE.Vector3[]; // Eintrittspunkte auf Elementen (blau im Debug)
+  cornerPts: THREE.Vector3[]; // Knickpunkte vom orthogonalen Routing (gelb)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Schritt 4: Optimale Linienpunkte für den gesamten Kabelweg
-// ─────────────────────────────────────────────────────────────────────────────
-
 /**
- * Berechnet für jeden Abschnitt des Kabelwegs den geometrisch
- * optimalen Verbindungspunkt (Nearest-Point-Algorithmus).
+ * Berechnet für den gesamten Kabelweg einen vollständig orthogonalen Pfad.
  *
- * Ablauf:
- *   pts[0] = Mittelpunkt der Quelle
- *   pts[1] = nächster Punkt auf Kabelweg-Element 1 zu pts[0]
- *   pts[2] = nächster Punkt auf Kabelweg-Element 2 zu pts[1]
- *   ...
- *   pts[n] = nächster Punkt auf Ziel zu pts[n-1]
+ * Ablauf je Element (ausser Quelle):
+ *   1. getOrthogonalConnectionPoint → Eintrittspunkt auf Element-Oberfläche
+ *   2. clampToBBox → Korrektur damit kein Phantom-Punkt entsteht
+ *   3. makeOrthogonalPath → L- oder U-förmige Verbindung zum Eintrittspunkt
  *
- * Fallback auf gespeicherten Klick-Punkt wenn keine BBox verfügbar.
+ * Letztes Element: zusätzlich orthogonaler Pfad zum Mittelpunkt.
+ * Fallback: wenn keine BBox vorhanden → orthogonaler Pfad zum Klick-Punkt.
  */
 async function calculateRoutePoints(
   components: OBC.Components,
-  source: PickedElement,
-  route: RouteElement[],
-  target: PickedElement
-): Promise<THREE.Vector3[]> {
-  const all = [source, ...route, target];
-  const boxes: (THREE.Box3 | null)[] = await Promise.all(
+  source:     PickedElement,
+  route:      RouteElement[],
+  target:     PickedElement
+): Promise<RouteCalcResult> {
+  const all   = [source, ...route, target];
+  const boxes = await Promise.all(
     all.map((el) => getElementBBox(components, el.modelId, el.expressId))
   );
 
-  const pts: THREE.Vector3[] = [];
+  const pts:       THREE.Vector3[] = [];
+  const entryPts:  THREE.Vector3[] = [];
+  const cornerPts: THREE.Vector3[] = [];
 
   for (let i = 0; i < all.length; i++) {
     const box = boxes[i];
-    if (!box) {
-      // Kein BBox → Klick-Position als Fallback
-      pts.push(all[i].point.clone());
+
+    if (i === 0) {
+      // Quelle: Startpunkt = Mittelpunkt (oder Klick-Punkt wenn keine BBox)
+      if (box) {
+        const c = new THREE.Vector3();
+        box.getCenter(c);
+        pts.push(c);
+      } else {
+        pts.push(all[0].point.clone());
+      }
       continue;
     }
 
-    if (i === 0) {
-      // Quelle: Startpunkt = Mittelpunkt
+    const prevPt = pts[pts.length - 1];
+
+    if (!box) {
+      // Kein BBox → orthogonaler Pfad zum gespeicherten Klick-Punkt
+      const seg = makeOrthogonalPath(prevPt, all[i].point.clone());
+      cornerPts.push(...seg.slice(1, -1));
+      pts.push(...seg.slice(1));
+      continue;
+    }
+
+    // ── Eintrittspunkt auf Element-Oberfläche berechnen ───────────────────
+    let entryPt = getOrthogonalConnectionPoint(prevPt, box);
+    entryPt = clampToBBox(entryPt, box);
+    entryPts.push(entryPt.clone());
+
+    // ── Orthogonaler Pfad vom letzten Punkt zum Eintrittspunkt ────────────
+    const seg = makeOrthogonalPath(prevPt, entryPt);
+    cornerPts.push(...seg.slice(1, -1)); // nur Zwischenpunkte (keine Start/Ziel)
+    pts.push(...seg.slice(1));
+
+    // ── Letztes Element: zusätzlich zum Mittelpunkt weiterrouten ──────────
+    if (i === all.length - 1) {
       const center = new THREE.Vector3();
       box.getCenter(center);
-      pts.push(center);
-    } else {
-      // Alle weiteren: nächster Punkt zum vorherigen Punkt
-      pts.push(getNearestPoint(pts[pts.length - 1], box));
+      if (center.distanceTo(entryPt) > 0.1) {
+        const endSeg = makeOrthogonalPath(pts[pts.length - 1], center);
+        cornerPts.push(...endSeg.slice(1, -1));
+        pts.push(...endSeg.slice(1));
+      }
     }
   }
 
-  return pts;
+  return { pts, entryPts, cornerPts };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Schritt 7: Debug-Visualisierung (rote Kugeln an jedem Linienpunkt)
+// Schritt 6: Debug-Visualisierung (farbige Kugeln je Punkt-Typ)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Zeichnet kleine rote Kugeln an jedem berechneten Linienpunkt.
- * Aktivieren: window.debugCableRouting = true  (in der Browser-Konsole)
- * Deaktivieren: window.debugCableRouting = false
+ * Zeichnet farbige Kugeln an jedem berechneten Punkt.
+ *
+ * Aktivieren in der Browser-Konsole (F12):
+ *   window.debugCableRouting = true
+ * Deaktivieren:
+ *   window.debugCableRouting = false
+ *
+ * Farben:
+ *   ROT  (r=0.08m) — alle finalen Linienpunkte
+ *   GELB (r=0.10m) — Knickpunkte vom orthogonalen Routing
+ *   BLAU (r=0.12m) — Eintrittspunkte auf Elementen
  */
-function drawDebugSpheres(world: OBC.World, pts: THREE.Vector3[], cableId: string) {
+function drawDebugSpheres(
+  world:   OBC.World,
+  result:  RouteCalcResult,
+  cableId: string
+) {
   const group = new THREE.Group();
   group.name = `cable-debug-${cableId}`;
-  const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false });
-  for (const pt of pts) {
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), mat);
-    mesh.position.copy(pt);
-    mesh.renderOrder = 1000;
-    group.add(mesh);
-  }
+
+  const addSpheres = (
+    points: THREE.Vector3[],
+    color:  number,
+    radius: number,
+    order:  number
+  ) => {
+    const mat = new THREE.MeshBasicMaterial({ color, depthTest: false });
+    for (const pt of points) {
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 8, 8), mat);
+      mesh.position.copy(pt);
+      mesh.renderOrder = order;
+      group.add(mesh);
+    }
+  };
+
+  addSpheres(result.pts,       0xff2222, 0.08, 1000); // Rot:  alle Punkte
+  addSpheres(result.cornerPts, 0xffdd00, 0.10, 1001); // Gelb: Knickpunkte
+  addSpheres(result.entryPts,  0x4488ff, 0.12, 1002); // Blau: Eintrittspunkte
+
   world.scene.three.add(group);
 }
 
@@ -389,20 +519,21 @@ async function confirmCable() {
   c.trassIds        = _rs.route.map((e) => ({ modelId: e.modelId, expressId: e.expressId }));
   c.status = "geplant";
 
-  // ── Schritt 4: Optimierte Linienpunkte berechnen ────────────────────────
-  const pts = await calculateRoutePoints(
+  // ── Optimierten, orthogonalen Kabelweg berechnen ────────────────────────
+  const routeResult = await calculateRoutePoints(
     _components,
     _rs.source,
     _rs.route,
     _rs.target
   );
+  const { pts } = routeResult;
 
-  // ── Schritt 6: Länge aus echten 3D-Punkten ──────────────────────────────
+  // ── Länge aus echten 3D-Punkten (Summe der Segmentlängen) ───────────────
   let d = 0;
   for (let i = 1; i < pts.length; i++) d += pts[i].distanceTo(pts[i - 1]);
   c.length = Math.round(d * 10) / 10;
 
-  // ── Schritt 5: Three.js Linie zeichnen ──────────────────────────────────
+  // ── Three.js Linie zeichnen ──────────────────────────────────────────────
   if (pts.length >= 2) {
     const line = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints(pts),
@@ -412,9 +543,9 @@ async function confirmCable() {
     line.name = `cable-line-${c.id}`;
     _world.scene.three.add(line);
 
-    // ── Schritt 7: Debug-Kugeln (window.debugCableRouting = true aktivieren)
+    // ── Debug-Kugeln (Aktivieren: window.debugCableRouting = true) ──────────
     if ((window as any).debugCableRouting) {
-      drawDebugSpheres(_world, pts, c.id);
+      drawDebugSpheres(_world, routeResult, c.id);
     }
   }
 
