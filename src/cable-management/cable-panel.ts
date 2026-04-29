@@ -168,103 +168,80 @@ async function getElementBBox(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Schritt 1: Trassen-Orientierung erkennen
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface ElementOrientation {
-  axis:   "X" | "Y" | "Z"; // Hauptachse = längste Seite
-  length: number;            // Länge in dieser Achse
-  center: THREE.Vector3;    // Mittelpunkt des Elements
-}
-
-/**
- * Bestimmt die Hauptachse eines Elements aus seiner BoundingBox.
- * Die längste Seite der Box = Richtung in der die Trasse verläuft.
- *
- * Beispiel: Kabelwanne 300x60 in X-Richtung → axis = "X"
- *           Steigtrasse vertikal            → axis = "Y"
- *           Kabelwanne quer (Z-Richtung)    → axis = "Z"
- */
-function getElementOrientation(box: THREE.Box3): ElementOrientation {
-  const sizeX = box.max.x - box.min.x;
-  const sizeY = box.max.y - box.min.y;
-  const sizeZ = box.max.z - box.min.z;
-  const center = new THREE.Vector3();
-  box.getCenter(center);
-
-  if (sizeX >= sizeY && sizeX >= sizeZ) {
-    return { axis: "X", length: sizeX, center };
-  } else if (sizeZ >= sizeX && sizeZ >= sizeY) {
-    return { axis: "Z", length: sizeZ, center };
-  } else {
-    return { axis: "Y", length: sizeY, center };
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Schritt 2: Einstiegspunkt entlang der Trassen-Achse
+// Schritt 5: Steigtrassen-Erkennung
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Gibt den Eintrittspunkt auf einer Trasse zurück.
- * Der Einstieg liegt immer AM ENDE der Trassen-Achse das dem
- * vorherigen Punkt `fromPoint` am nächsten ist.
- *
- * Y und die senkrechte Achse werden auf den Trassen-Mittelpunkt gesetzt —
- * das Kabel trifft die Trasse mittig, nicht irgendwo an der Seite.
+ * Erkennt ob ein Element eine vertikale Steigtrasse ist.
+ * Kriterium: Höhe (Y) deutlich grösser als Breite und Tiefe.
  */
-function getEntryPointOnTrasse(
-  fromPoint: THREE.Vector3,
-  box:       THREE.Box3
+function isSteigtrasse(box: THREE.Box3): boolean {
+  const height = box.max.y - box.min.y;
+  const width  = box.max.x - box.min.x;
+  const depth  = box.max.z - box.min.z;
+  return height > width * 2 && height > depth * 2;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Schritt 7 (Korrektur): clampToBBox
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Klemmt einen Punkt auf die BoundingBox — stellt sicher dass der Punkt
+ * auf oder innerhalb des Elements liegt (kein "Phantom-Punkt" im Leeren).
+ */
+function clampToBBox(pt: THREE.Vector3, box: THREE.Box3): THREE.Vector3 {
+  return new THREE.Vector3(
+    Math.max(box.min.x, Math.min(box.max.x, pt.x)),
+    Math.max(box.min.y, Math.min(box.max.y, pt.y)),
+    Math.max(box.min.z, Math.min(box.max.z, pt.z))
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Schritt 2: Orthogonaler Eintrittspunkt auf Element-Oberfläche
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Berechnet den Eintrittspunkt auf der Oberfläche von `toBBox`
+ * ausgehend vom letzten akkumulierten Punkt `fromPt`.
+ *
+ * Strategie (Reihenfolge der Prüfung):
+ *   1. Steigtrasse → Ober- oder Unterkante (Y-Fläche)
+ *   2. Hauptsächlich Y-Bewegung → Y-Fläche
+ *   3. Hauptsächlich X-Bewegung → X-Fläche (links/rechts)
+ *   4. Hauptsächlich Z-Bewegung → Z-Fläche (vorne/hinten)
+ *
+ * Y und Z (bzw. Y und X) des vorherigen Punkts bleiben erhalten →
+ * Eintrittspunkt hat schon die richtige Höhe/Tiefe für den Abbiegepunkt.
+ */
+function getOrthogonalConnectionPoint(
+  fromPt: THREE.Vector3,
+  toBBox: THREE.Box3
 ): THREE.Vector3 {
-  const o = getElementOrientation(box);
-  const { center } = o;
+  const toCenter = new THREE.Vector3();
+  toBBox.getCenter(toCenter);
 
-  if (o.axis === "X") {
-    const entryX = fromPoint.x < center.x ? box.min.x : box.max.x;
-    return new THREE.Vector3(entryX, center.y, center.z);
-  } else if (o.axis === "Z") {
-    const entryZ = fromPoint.z < center.z ? box.min.z : box.max.z;
-    return new THREE.Vector3(center.x, center.y, entryZ);
+  const dx = Math.abs(toCenter.x - fromPt.x);
+  const dy = Math.abs(toCenter.y - fromPt.y);
+  const dz = Math.abs(toCenter.z - fromPt.z);
+
+  if (isSteigtrasse(toBBox) || dy > Math.max(dx, dz)) {
+    // Vertikal — oben oder unten eintreten
+    const faceY = fromPt.y < toCenter.y ? toBBox.min.y : toBBox.max.y;
+    return new THREE.Vector3(fromPt.x, faceY, fromPt.z);
+  }
+
+  if (dx >= dz) {
+    // Hauptsächlich X → linke oder rechte Fläche
+    const faceX = fromPt.x < toCenter.x ? toBBox.min.x : toBBox.max.x;
+    return new THREE.Vector3(faceX, fromPt.y, fromPt.z);
   } else {
-    // Y-Achse (Steigtrasse)
-    const entryY = fromPoint.y < center.y ? box.min.y : box.max.y;
-    return new THREE.Vector3(center.x, entryY, center.z);
+    // Hauptsächlich Z → vordere oder hintere Fläche
+    const faceZ = fromPt.z < toCenter.z ? toBBox.min.z : toBBox.max.z;
+    return new THREE.Vector3(fromPt.x, fromPt.y, faceZ);
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Schritt 3: Austrittspunkt entlang der Trassen-Achse
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Gibt den Austrittspunkt auf einer Trasse zurück.
- * Der Austritt liegt am ENDE der Trassen-Achse das dem
- * nächsten Element `nextCenter` am nächsten ist.
- *
- * Zusammen mit getEntryPointOnTrasse ergibt sich:
- *   Einstieg (näheres Ende) → entlang der Trasse → Austritt (ferneres Ende)
- * Das Kabel läuft also durch die ganze Trasse.
- */
-function getExitPointOnTrasse(
-  box:        THREE.Box3,
-  nextCenter: THREE.Vector3
-): THREE.Vector3 {
-  const o = getElementOrientation(box);
-  const { center } = o;
-
-  if (o.axis === "X") {
-    const exitX = nextCenter.x > center.x ? box.max.x : box.min.x;
-    return new THREE.Vector3(exitX, center.y, center.z);
-  } else if (o.axis === "Z") {
-    const exitZ = nextCenter.z > center.z ? box.max.z : box.min.z;
-    return new THREE.Vector3(center.x, center.y, exitZ);
-  } else {
-    const exitY = nextCenter.y > center.y ? box.max.y : box.min.y;
-    return new THREE.Vector3(center.x, exitY, center.z);
-  }
-}
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Schritt 3: makeOrthogonalPath — Achsenparallele Zwischenpunkte
@@ -311,28 +288,25 @@ function makeOrthogonalPath(A: THREE.Vector3, B: THREE.Vector3): THREE.Vector3[]
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Schritt 4: calculateRoutePoints — trassen-orientierter Kabelweg
+// Schritt 4: calculateRoutePoints — vollständig orthogonaler Kabelweg
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface RouteCalcResult {
   pts:       THREE.Vector3[]; // alle Linienpunkte (für THREE.Line)
-  entryPts:  THREE.Vector3[]; // Eintrittspunkte auf Trassen (blau)
-  exitPts:   THREE.Vector3[]; // Austrittspunkte auf Trassen (gelb)
-  cornerPts: THREE.Vector3[]; // orthogonale Knickpunkte (rot)
+  entryPts:  THREE.Vector3[]; // Eintrittspunkte auf Elementen (blau im Debug)
+  cornerPts: THREE.Vector3[]; // Knickpunkte vom orthogonalen Routing (gelb)
 }
 
 /**
- * Berechnet den vollständigen, trassen-orientierten Kabelweg.
+ * Berechnet für den gesamten Kabelweg einen vollständig orthogonalen Pfad.
  *
- * Ablauf:
- *   [0] Quelle:            Startpunkt = Mittelpunkt
- *   [Schritt 5]            Vertikaler Versatz zur ersten Trasse?
- *                          → erst Y anpassen
- *   [1..n-1] Trassen:      je Trasse:
- *                          1. Eintrittspunkt (näheres Ende der Trassen-Achse)
- *                          2. makeOrthogonalPath → Kabel biegt zur Trasse hin
- *                          3. Entlang der Trassen-Achse zum Austrittspunkt
- *   [n] Ziel:              makeOrthogonalPath zum Ziel-Mittelpunkt
+ * Ablauf je Element (ausser Quelle):
+ *   1. getOrthogonalConnectionPoint → Eintrittspunkt auf Element-Oberfläche
+ *   2. clampToBBox → Korrektur damit kein Phantom-Punkt entsteht
+ *   3. makeOrthogonalPath → L- oder U-förmige Verbindung zum Eintrittspunkt
+ *
+ * Letztes Element: zusätzlich orthogonaler Pfad zum Mittelpunkt.
+ * Fallback: wenn keine BBox vorhanden → orthogonaler Pfad zum Klick-Punkt.
  */
 async function calculateRoutePoints(
   components: OBC.Components,
@@ -340,94 +314,63 @@ async function calculateRoutePoints(
   route:      RouteElement[],
   target:     PickedElement
 ): Promise<RouteCalcResult> {
-  const all  = [source, ...route, target];
-  const n    = all.length - 1; // Index des Ziels
+  const all   = [source, ...route, target];
   const boxes = await Promise.all(
     all.map((el) => getElementBBox(components, el.modelId, el.expressId))
   );
 
   const pts:       THREE.Vector3[] = [];
   const entryPts:  THREE.Vector3[] = [];
-  const exitPts:   THREE.Vector3[] = [];
   const cornerPts: THREE.Vector3[] = [];
 
-  // ── Quelle: Startpunkt ────────────────────────────────────────────────────
-  const srcBox = boxes[0];
-  if (srcBox) {
-    const c = new THREE.Vector3();
-    srcBox.getCenter(c);
-    pts.push(c);
-  } else {
-    pts.push(all[0].point.clone());
-  }
+  for (let i = 0; i < all.length; i++) {
+    const box = boxes[i];
 
-  // ── Schritt 5: Vertikaler Versatz zur ersten Trasse? ─────────────────────
-  // Wenn Quelle und erste Trasse unterschiedliche Höhen haben (> 30 cm),
-  // erst vertikal zur Trassen-Höhe fahren, bevor orthogonal eingebogen wird.
-  if (route.length > 0 && boxes[1]) {
-    const firstTrasseCenter = new THREE.Vector3();
-    boxes[1].getCenter(firstTrasseCenter);
-    const srcCenter = pts[0];
-    const heightDiff = Math.abs(srcCenter.y - firstTrasseCenter.y);
-    if (heightDiff > 0.3) {
-      pts.push(new THREE.Vector3(srcCenter.x, firstTrasseCenter.y, srcCenter.z));
+    if (i === 0) {
+      // Quelle: Startpunkt = Mittelpunkt (oder Klick-Punkt wenn keine BBox)
+      if (box) {
+        const c = new THREE.Vector3();
+        box.getCenter(c);
+        pts.push(c);
+      } else {
+        pts.push(all[0].point.clone());
+      }
+      continue;
     }
-  }
 
-  // ── Trassen (Index 1 bis n-1) ─────────────────────────────────────────────
-  for (let i = 1; i < n; i++) {
-    const box    = boxes[i];
     const prevPt = pts[pts.length - 1];
 
     if (!box) {
-      // Kein BBox → orthogonaler Pfad zum Klick-Punkt
+      // Kein BBox → orthogonaler Pfad zum gespeicherten Klick-Punkt
       const seg = makeOrthogonalPath(prevPt, all[i].point.clone());
       cornerPts.push(...seg.slice(1, -1));
       pts.push(...seg.slice(1));
       continue;
     }
 
-    // 1. Eintrittspunkt: näheres Ende der Trassen-Achse zum prevPt
-    const entryPt = getEntryPointOnTrasse(prevPt, box);
+    // ── Eintrittspunkt auf Element-Oberfläche berechnen ───────────────────
+    let entryPt = getOrthogonalConnectionPoint(prevPt, box);
+    entryPt = clampToBBox(entryPt, box);
     entryPts.push(entryPt.clone());
 
-    // 2. Orthogonaler Pfad von prevPt zum Eintrittspunkt (L- oder U-Form)
+    // ── Orthogonaler Pfad vom letzten Punkt zum Eintrittspunkt ────────────
     const seg = makeOrthogonalPath(prevPt, entryPt);
-    cornerPts.push(...seg.slice(1, -1));
+    cornerPts.push(...seg.slice(1, -1)); // nur Zwischenpunkte (keine Start/Ziel)
     pts.push(...seg.slice(1));
 
-    // 3. Austrittspunkt: Ende der Trassen-Achse Richtung nächstes Element
-    const nextBox = boxes[i + 1];
-    const nextCenter = new THREE.Vector3();
-    if (nextBox) {
-      nextBox.getCenter(nextCenter);
-    } else {
-      nextCenter.copy(all[i + 1].point);
-    }
-    const exitPt = getExitPointOnTrasse(box, nextCenter);
-
-    // 4. Entlang der Trassen-Achse: Einstieg → Austritt (immer 1 Achse)
-    if (exitPt.distanceTo(entryPt) > 0.1) {
-      exitPts.push(exitPt.clone());
-      pts.push(exitPt.clone());
+    // ── Letztes Element: zusätzlich zum Mittelpunkt weiterrouten ──────────
+    if (i === all.length - 1) {
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      if (center.distanceTo(entryPt) > 0.1) {
+        const endSeg = makeOrthogonalPath(pts[pts.length - 1], center);
+        cornerPts.push(...endSeg.slice(1, -1));
+        pts.push(...endSeg.slice(1));
+      }
     }
   }
 
-  // ── Ziel (Index n): orthogonaler Pfad zum Mittelpunkt ────────────────────
-  const tgtBox  = boxes[n];
-  const prevPt  = pts[pts.length - 1];
-  const tgtCenter = new THREE.Vector3();
-  if (tgtBox) {
-    tgtBox.getCenter(tgtCenter);
-  } else {
-    tgtCenter.copy(all[n].point);
-  }
-
-  const tgtSeg = makeOrthogonalPath(prevPt, tgtCenter);
-  cornerPts.push(...tgtSeg.slice(1, -1));
-  pts.push(...tgtSeg.slice(1));
-
-  return { pts, entryPts, exitPts, cornerPts };
+  return { pts, entryPts, cornerPts };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -443,10 +386,9 @@ async function calculateRoutePoints(
  *   window.debugCableRouting = false
  *
  * Farben:
- *   ROT    (r=0.08m) — alle finalen Linienpunkte
- *   BLAU   (r=0.12m) — Eintrittspunkte auf Trassen
- *   GELB   (r=0.12m) — Austrittspunkte auf Trassen
- *   ORANGE (r=0.10m) — orthogonale Knickpunkte
+ *   ROT  (r=0.08m) — alle finalen Linienpunkte
+ *   GELB (r=0.10m) — Knickpunkte vom orthogonalen Routing
+ *   BLAU (r=0.12m) — Eintrittspunkte auf Elementen
  */
 function drawDebugSpheres(
   world:   OBC.World,
@@ -471,10 +413,9 @@ function drawDebugSpheres(
     }
   };
 
-  addSpheres(result.pts,       0xff2222, 0.08, 1000); // Rot:    alle Punkte
-  addSpheres(result.entryPts,  0x4488ff, 0.12, 1001); // Blau:   Eintritte
-  addSpheres(result.exitPts,   0xffdd00, 0.12, 1002); // Gelb:   Austritte
-  addSpheres(result.cornerPts, 0xff8800, 0.10, 1003); // Orange: Knickpunkte
+  addSpheres(result.pts,       0xff2222, 0.08, 1000); // Rot:  alle Punkte
+  addSpheres(result.cornerPts, 0xffdd00, 0.10, 1001); // Gelb: Knickpunkte
+  addSpheres(result.entryPts,  0x4488ff, 0.12, 1002); // Blau: Eintrittspunkte
 
   world.scene.three.add(group);
 }
