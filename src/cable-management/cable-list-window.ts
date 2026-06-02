@@ -8,6 +8,8 @@ import {
   addCableChangeListener,
   notifyCableChange,
 } from "./cables";
+import { openCableEditModal, initCableEditModal } from "./cable-edit-modal";
+import { openRoutingEdit } from "./cable-panel";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Module-level state
@@ -136,7 +138,6 @@ async function toggleHighlight(cable: Cable) {
 
 function showDeleteConfirm(cable: Cable) {
   if (!_win) return;
-  // Remove existing overlay if any
   _win.querySelector(".cw-overlay")?.remove();
 
   const overlay = document.createElement("div");
@@ -222,8 +223,10 @@ function buildTableHTML(): string {
         `<td class="cw-td-len">${c.length > 0 ? c.length + "m" : "—"}</td>` +
         `<td>${statusBadge(c.status)}</td>` +
         `<td class="cw-td-act">` +
-        `<button class="cw-act-btn cw-act-view" data-cid="${c.id}" title="Im Modell anzeigen">👁</button>` +
-        `<button class="cw-act-btn cw-act-del"  data-cid="${c.id}" title="Löschen">✕</button>` +
+        `<button class="cw-act-btn cw-act-view"  data-cid="${c.id}" title="Im Modell anzeigen">👁</button>` +
+        `<button class="cw-act-btn cw-act-edit"  data-cid="${c.id}" title="Kabel-Attribute bearbeiten">✒</button>` +
+        `<button class="cw-act-btn cw-act-route" data-cid="${c.id}" title="Routing ändern">↺</button>` +
+        `<button class="cw-act-btn cw-act-del"   data-cid="${c.id}" title="Löschen">✕</button>` +
         `</td></tr>`
       );
     })
@@ -249,23 +252,45 @@ function renderTable() {
 
 function attachTableListeners() {
   if (!_win) return;
+
+  // Zeilen-Klick → Highlight toggeln
   _win.querySelectorAll<HTMLElement>(".cw-row").forEach((row) => {
     row.addEventListener("click", (e) => {
       if ((e.target as Element).closest("[data-cid].cw-act-btn")) return;
       const cid = row.dataset.cid!;
       const cable = cableRegistry.find((c) => c.id === cid);
-      if (cable) toggleHighlight(cable);
+      if (cable) void toggleHighlight(cable);
     });
   });
 
+  // 👁 Im Modell anzeigen
   _win.querySelectorAll<HTMLElement>(".cw-act-view").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const cable = cableRegistry.find((c) => c.id === btn.dataset.cid);
-      if (cable) toggleHighlight(cable);
+      if (cable) void toggleHighlight(cable);
     });
   });
 
+  // ✒ Attribute bearbeiten
+  _win.querySelectorAll<HTMLElement>(".cw-act-edit").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const cable = cableRegistry.find((c) => c.id === btn.dataset.cid);
+      if (cable) openCableEditModal(cable);
+    });
+  });
+
+  // ↺ Routing ändern
+  _win.querySelectorAll<HTMLElement>(".cw-act-route").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const cable = cableRegistry.find((c) => c.id === btn.dataset.cid);
+      if (cable) void openRoutingEdit(cable);
+    });
+  });
+
+  // ✕ Löschen
   _win.querySelectorAll<HTMLElement>(".cw-act-del").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -314,8 +339,8 @@ function setupHeaderDrag(header: HTMLElement) {
 function ensureDragListeners() {
   document.addEventListener("mousemove", (e) => {
     if (!_dragging || !_win) return;
-    _win.style.left   = `${e.clientX - _dragOffX}px`;
-    _win.style.top    = `${e.clientY - _dragOffY}px`;
+    _win.style.left      = `${e.clientX - _dragOffX}px`;
+    _win.style.top       = `${e.clientY - _dragOffY}px`;
     _win.style.transform = "none";
   });
   document.addEventListener("mouseup", () => { _dragging = false; });
@@ -332,7 +357,6 @@ function ensureWindow() {
   _win.className = "cw-window";
   document.body.appendChild(_win);
   ensureDragListeners();
-  // Refresh when cable registry changes
   addCableChangeListener(() => { if (_isOpen) renderTable(); });
 }
 
@@ -344,7 +368,12 @@ export function openCableWindow(
   components: OBC.Components,
   world: OBC.World
 ): void {
-  if (!_components) { _components = components; _world = world; }
+  if (!_components) {
+    _components = components;
+    _world = world;
+    // world für Attribut-Edit-Modal bereitstellen (Farb-Update der 3D-Linie)
+    initCableEditModal(world);
+  }
   ensureWindow();
   _isOpen = true;
   renderWindowFull();
@@ -354,6 +383,6 @@ export function openCableWindow(
 export function closeCableWindow(): void {
   _isOpen = false;
   if (_win) _win.style.display = "none";
-  clearHighlights();
+  void clearHighlights();
   _selectedCableId = null;
 }

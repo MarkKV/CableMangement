@@ -5,6 +5,7 @@ import * as FRAGS from "@thatopen/fragments";
 import * as BUI from "@thatopen/ui";
 import {
   Cable,
+  CableHistoryEntry,
   cableRegistry,
   nextCableId,
   getNextColor,
@@ -12,6 +13,11 @@ import {
 } from "./cables";
 import { getCatalog } from "./catalog";
 import { openCatalogWindow } from "./catalog-window";
+import {
+  getEditingCable,
+  setEditingCable,
+  showConflictToast,
+} from "./cable-edit-state";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Exported panel state (used by content grid)
@@ -86,7 +92,11 @@ let _lastRayPoint: THREE.Vector3 | null = null;
 let _panel: HTMLDivElement | null = null;
 let _tooltip: HTMLDivElement | null = null;
 let _modal: HTMLDialogElement | null = null;
+let _routingEditBanner: HTMLDivElement | null = null;
 let _panelListenerAttached = false;
+
+// Routing-Edit-Modus (bestehende Kabel neu routen)
+let _isRoutingEdit = false;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // IFC / fragment helpers
@@ -646,11 +656,25 @@ async function cancelRouting() {
   if (!_components) return;
   const hl = _components.get(OBF.Highlighter);
   _active = false;
-  if (_rs.cable) {
-    const idx = cableRegistry.indexOf(_rs.cable);
-    if (idx !== -1) cableRegistry.splice(idx, 1);
+
+  if (_isRoutingEdit) {
+    // Edit-Modus: Kabel bleibt im Registry, alte Linie wieder sichtbar machen
+    if (_rs.cable && _world) {
+      const oldLine = _world.scene.three.getObjectByName(`cable-line-${_rs.cable.id}`);
+      if (oldLine) oldLine.visible = true;
+    }
+  } else {
+    // Neues Kabel: aus Registry entfernen
+    if (_rs.cable) {
+      const idx = cableRegistry.indexOf(_rs.cable);
+      if (idx !== -1) cableRegistry.splice(idx, 1);
+    }
   }
+
+  _isRoutingEdit = false;
   _rs = makeEmptyState();
+  hideBanner();
+  setEditingCable(null);
   await hl.clear("cable-source");
   await hl.clear("cable-route");
   await hl.clear("cable-target");
@@ -733,6 +757,33 @@ async function confirmCable() {
   if (!_rs.cable || !_rs.source || !_rs.target || !_world || !_components) return;
 
   const c = _rs.cable;
+
+  // Routing-Edit: alte Linie entfernen + History-Eintrag schreiben
+  if (_isRoutingEdit) {
+    const oldLine = _world.scene.three.getObjectByName(`cable-line-${c.id}`);
+    if (oldLine) {
+      _world.scene.three.remove(oldLine);
+      if ((oldLine as THREE.Line).geometry) (oldLine as THREE.Line).geometry.dispose();
+    }
+    const entry: CableHistoryEntry = {
+      changedAt: new Date().toISOString(),
+      changedFields: ["routing"],
+      previousValues: {
+        sourceModelId:   c.sourceModelId,
+        sourceExpressId: c.sourceExpressId,
+        sourceLabel:     c.sourceLabel,
+        targetModelId:   c.targetModelId,
+        targetExpressId: c.targetExpressId,
+        targetLabel:     c.targetLabel,
+        trassIds:        JSON.parse(JSON.stringify(c.trassIds)),
+        length:          c.length,
+      },
+    };
+    c.history = c.history ?? [];
+    c.history.push(entry);
+    c.updatedAt = new Date().toISOString();
+  }
+
   c.sourceModelId   = _rs.source.modelId;
   c.sourceExpressId = _rs.source.expressId;
   c.sourceLabel     = _rs.source.label;
@@ -740,7 +791,7 @@ async function confirmCable() {
   c.targetExpressId = _rs.target.expressId;
   c.targetLabel     = _rs.target.label;
   c.trassIds        = _rs.route.map((e) => ({ modelId: e.modelId, expressId: e.expressId }));
-  c.status = "geplant";
+  if (!_isRoutingEdit) c.status = "geplant";
 
   // ── Optimierten, orthogonalen Kabelweg berechnen ────────────────────────
   const routeResult = await calculateRoutePoints(
@@ -779,7 +830,10 @@ async function confirmCable() {
   hl.clear("cable-target");
 
   _active = false;
+  _isRoutingEdit = false;
   _rs = makeEmptyState();
+  hideBanner();
+  setEditingCable(null);
   renderPanel();
   hideTooltip();
   notifyCableChange();
@@ -1074,9 +1128,9 @@ function renderPanel() {
     </div>
     <div class="rp-actions">
       ${allConfirmed()
-        ? `<button class="rp-btn-primary" data-action="create-cable">✓ Kabel erstellen</button>`
+        ? `<button class="rp-btn-primary" data-action="create-cable">${_isRoutingEdit ? "💾 Routing speichern" : "✓ Kabel erstellen"}</button>`
         : `<button class="rp-btn-primary rp-btn--disabled" disabled
-            title="Bitte alle 3 Schritte abschliessen">✓ Kabel erstellen</button>`}
+            title="Bitte alle 3 Schritte abschliessen">${_isRoutingEdit ? "💾 Routing speichern" : "✓ Kabel erstellen"}</button>`}
       <button class="rp-btn-cancel" data-action="cancel-routing">✕ Abbrechen</button>
     </div>`;
 
@@ -1200,6 +1254,24 @@ function showTooltip(text: string) {
 
 function hideTooltip() {
   if (_tooltip) _tooltip.style.display = "none";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Viewer-Banner während Routing-Bearbeitung
+// ─────────────────────────────────────────────────────────────────────────────
+
+function showBanner(cableId: string) {
+  if (!_routingEditBanner) {
+    _routingEditBanner = document.createElement("div");
+    _routingEditBanner.className = "rp-edit-banner";
+    document.body.appendChild(_routingEditBanner);
+  }
+  _routingEditBanner.textContent = `↺ Routing wird bearbeitet: ${cableId}`;
+  _routingEditBanner.style.display = "block";
+}
+
+function hideBanner() {
+  if (_routingEditBanner) _routingEditBanner.style.display = "none";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1488,6 +1560,105 @@ export function initCableRouting(state: CablesPanelState): void {
   }
 }
 
+/**
+ * Öffnet das Routing-Panel mit vorgeladenen Daten eines bestehenden Kabels.
+ * Der Fachplaner sieht alle 3 Schritte als ✓ vorgeladen und kann einzelne
+ * Schritte per [✎] neu bearbeiten.
+ */
+export async function openRoutingEdit(cable: Cable): Promise<void> {
+  // Konflikt-Schutz: verhindert gleichzeitige Bearbeitung zweier Kabel
+  const editing = getEditingCable();
+  if (editing && editing.cableId !== cable.id) {
+    showConflictToast();
+    return;
+  }
+
+  if (!_components || !_world) return;
+
+  const hl = _components.get(OBF.Highlighter);
+  const fragments = _components.get(OBC.FragmentsManager);
+
+  setEditingCable({ cableId: cable.id, mode: "routing" });
+  _isRoutingEdit = true;
+  _active = true;
+  _rs = makeEmptyState();
+  _rs.cable = cable;
+
+  // Bestehende Linie ausblenden (wird bei Abbrechen wiederhergestellt,
+  // bei Speichern ersetzt)
+  const existingLine = _world.scene.three.getObjectByName(`cable-line-${cable.id}`);
+  if (existingLine) existingLine.visible = false;
+
+  // Schritt 1: Quelle vorbeladen
+  if (cable.sourceExpressId >= 0 && cable.sourceModelId) {
+    const label = await getElementLabel(fragments, cable.sourceModelId, cable.sourceExpressId);
+    const category = await getCategory(fragments, cable.sourceModelId, cable.sourceExpressId);
+    _rs.source = {
+      modelId: cable.sourceModelId,
+      expressId: cable.sourceExpressId,
+      point: new THREE.Vector3(),
+      label,
+      category,
+    };
+    _rs.step1 = "confirmed";
+    await hl.highlightByID(
+      "cable-source",
+      { [cable.sourceModelId]: new Set([cable.sourceExpressId]) },
+      false,
+      false
+    );
+  } else {
+    _rs.step1 = "editing";
+  }
+
+  // Schritt 2: Kabelweg vorbeladen
+  if (cable.trassIds.length > 0 && _rs.step1 === "confirmed") {
+    _rs.route = [];
+    for (const { modelId, expressId } of cable.trassIds) {
+      const label = await getElementLabel(fragments, modelId, expressId);
+      const category = await getCategory(fragments, modelId, expressId);
+      const length = await getElementLength(_components, modelId, expressId);
+      _rs.route.push({
+        modelId,
+        expressId,
+        point: new THREE.Vector3(),
+        label,
+        category,
+        length,
+      });
+    }
+    _rs.step2 = "confirmed";
+    await syncRouteHighlight();
+  } else if (_rs.step1 === "confirmed") {
+    _rs.step2 = "editing";
+  }
+
+  // Schritt 3: Ziel vorbeladen
+  if (cable.targetExpressId >= 0 && cable.targetModelId && _rs.step2 === "confirmed") {
+    const label = await getElementLabel(fragments, cable.targetModelId, cable.targetExpressId);
+    const category = await getCategory(fragments, cable.targetModelId, cable.targetExpressId);
+    _rs.target = {
+      modelId: cable.targetModelId,
+      expressId: cable.targetExpressId,
+      point: new THREE.Vector3(),
+      label,
+      category,
+    };
+    _rs.step3 = "confirmed";
+    await hl.highlightByID(
+      "cable-target",
+      { [cable.targetModelId]: new Set([cable.targetExpressId]) },
+      false,
+      false
+    );
+  } else if (_rs.step2 === "confirmed") {
+    _rs.step3 = "editing";
+  }
+
+  showBanner(cable.id);
+  renderPanel();
+}
+
 /** Call from toolbar "+ Neues Kabel" button. */
 export function openNewCableModal(): void {
   openModal(({ name, type, typeLabel, circuit, voltage }) => {
@@ -1498,6 +1669,7 @@ export function openNewCableModal(): void {
       targetModelId: "", targetExpressId: -1, targetLabel: "",
       trassIds: [], status: "in Bearbeitung",
       color: getNextColor(), length: 0,
+      remarks: "", updatedAt: new Date().toISOString(), history: [],
     };
     cableRegistry.push(cable);
     startRouting(cable);
@@ -1555,6 +1727,7 @@ export const cablesPanelTemplate: BUI.StatefullComponent<CablesPanelState> = (
         targetModelId: "", targetExpressId: -1, targetLabel: "",
         trassIds: [], status: "in Bearbeitung",
         color: getNextColor(), length: 0,
+        remarks: "", updatedAt: new Date().toISOString(), history: [],
       };
       cableRegistry.push(cable);
       startRouting(cable);

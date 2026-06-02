@@ -23,7 +23,7 @@ const world = worlds.create<
 world.name = "Main";
 world.scene = new OBC.SimpleScene(components);
 world.scene.setup();
-world.scene.three.background = new THREE.Color(0x1a1d23);
+world.scene.three.background = new THREE.Color(0xf0f2f4);
 
 const viewport = BUI.Component.create<BUI.Viewport>(() => {
   return BUI.html`<bim-viewport></bim-viewport>`;
@@ -36,7 +36,7 @@ world.camera.threePersp.updateProjectionMatrix();
 world.camera.controls.restThreshold = 0.05;
 
 const worldGrid = components.get(OBC.Grids).create(world);
-worldGrid.material.uniforms.uColor.value = new THREE.Color(0x494b50);
+worldGrid.material.uniforms.uColor.value = new THREE.Color(0xd0d5dd);
 worldGrid.material.uniforms.uSize1.value = 2;
 worldGrid.material.uniforms.uSize2.value = 8;
 

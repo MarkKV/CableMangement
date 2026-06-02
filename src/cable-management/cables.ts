@@ -1,4 +1,10 @@
-export type CableStatus = "in Bearbeitung" | "geplant";
+export type CableStatus = "in Bearbeitung" | "geplant" | "verlegt" | "geprüft";
+
+export interface CableHistoryEntry {
+  changedAt: string;
+  changedFields: string[];
+  previousValues: Record<string, unknown>;
+}
 
 export interface Cable {
   id: string;
@@ -17,6 +23,9 @@ export interface Cable {
   status: CableStatus;
   color: string;
   length: number;
+  remarks: string;
+  updatedAt: string;
+  history: CableHistoryEntry[];
 }
 
 export const CABLE_COLORS = [

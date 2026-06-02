@@ -98,9 +98,9 @@ export const viewportGridTemplate: BUI.StatefullComponent<ViewportGridState> = (
     grid.layouts = {
       main: {
         template: `
-          "bottomToolbar bottomToolbar bottomToolbar" auto
           "leftToolbar messages rightToolbar" auto
           "leftToolbar empty rightToolbar" 1fr
+          "bottomToolbar bottomToolbar bottomToolbar" auto
           /auto 1fr auto
         `,
       },
