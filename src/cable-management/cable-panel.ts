@@ -75,6 +75,7 @@ let _panelUpdate: (() => void) | null = null;
 let _active = false;
 let _rs: RoutingState = makeEmptyState();
 let _dragSrcIdx: number | null = null;
+let _routeAutoSorted = false; // true wenn Algorithmus Reihenfolge geändert hat
 let _components: OBC.Components | null = null;
 let _world: OBC.World | null = null;
 let _mouseX = 0;
@@ -249,42 +250,196 @@ function getOrthogonalConnectionPoint(
 
 /**
  * Erzeugt einen rein orthogonalen (achsenparallelen) Pfad von A nach B.
- * Maximal 2 Zwischenpunkte, Reihenfolge immer: erst X, dann Y, dann Z.
+ * Berechnet alle möglichen Varianten und wählt die kürzeste.
+ * Mit preferredAxis: bevorzugt Varianten die mit dieser Achse starten
+ * (Tiebreaker wenn alle Varianten gleich lang sind).
  *
  * Ergebnisformen:
  *   2 Punkte  [A, B]:          bereits auf gleicher Achse
  *   3 Punkte  [A, K, B]:       L-Form (kein Höhenunterschied)
  *   4 Punkte  [A, K1, K2, B]:  U-/S-Form (mit Höhenunterschied)
  */
-function makeOrthogonalPath(A: THREE.Vector3, B: THREE.Vector3): THREE.Vector3[] {
-  const T  = 0.1; // 10 cm Schwellwert: darunter = "gleiche Achse"
+function makeOrthogonalPath(
+  A: THREE.Vector3,
+  B: THREE.Vector3,
+  preferredAxis: "X" | "Y" | "Z" | null = null
+): THREE.Vector3[] {
+  const T  = 0.1;
   const dx = Math.abs(B.x - A.x);
   const dy = Math.abs(B.y - A.y);
   const dz = Math.abs(B.z - A.z);
 
-  // ── Gleicher Punkt oder nur eine Achse verschieden → kein Knick nötig ────
+  // Gleicher Punkt oder nur eine Achse verschieden → kein Knick
   if (dx < T && dy < T && dz < T) return [A.clone(), B.clone()];
   if (dy < T && dz < T)           return [A.clone(), B.clone()]; // nur X
   if (dx < T && dz < T)           return [A.clone(), B.clone()]; // nur Y
   if (dx < T && dy < T)           return [A.clone(), B.clone()]; // nur Z
 
-  // ── L-Form: gleiche Höhe (dy < T), horizontale Bewegung in X und Z ───────
-  // Strategie: erst X, dann Z
-  if (dy < T) {
-    return [
-      A.clone(),
-      new THREE.Vector3(B.x, A.y, A.z), // Knick: X bewegt, Z noch alt
-      B.clone(),                          // Z bewegt
-    ];
+  function pathLen(pts: THREE.Vector3[]): number {
+    let len = 0;
+    for (let i = 1; i < pts.length; i++) len += pts[i - 1].distanceTo(pts[i]);
+    return len;
   }
 
-  // ── U-/S-Form: Höhenunterschied → X, dann Y, dann Z ─────────────────────
-  return [
-    A.clone(),
-    new THREE.Vector3(B.x, A.y, A.z), // Knick 1: X bewegt
-    new THREE.Vector3(B.x, B.y, A.z), // Knick 2: Y bewegt (hoch/runter)
-    B.clone(),                          // Z bewegt
+  function startsWithAxis(pts: THREE.Vector3[], axis: "X" | "Y" | "Z"): boolean {
+    if (pts.length < 2) return false;
+    const d = pts[1].clone().sub(pts[0]);
+    if (axis === "X") return Math.abs(d.x) > 0.01;
+    if (axis === "Y") return Math.abs(d.y) > 0.01;
+    return Math.abs(d.z) > 0.01;
+  }
+
+  function pickBest(variants: THREE.Vector3[][]): THREE.Vector3[] {
+    if (preferredAxis) {
+      const preferred = variants.filter((v) => startsWithAxis(v, preferredAxis));
+      if (preferred.length > 0) {
+        return preferred.reduce((best, v) => (pathLen(v) < pathLen(best) ? v : best));
+      }
+    }
+    return variants.reduce((best, v) => (pathLen(v) < pathLen(best) ? v : best));
+  }
+
+  // ── L-Form: gleiche Höhe (dy < T) ────────────────────────────────────────
+  if (dy < T) {
+    const optXZ = [A.clone(), new THREE.Vector3(B.x, A.y, A.z), B.clone()]; // erst X, dann Z
+    const optZX = [A.clone(), new THREE.Vector3(A.x, A.y, B.z), B.clone()]; // erst Z, dann X
+
+    if (preferredAxis === "X") return optXZ;
+    if (preferredAxis === "Z") return optZX;
+    // Default: wähle Option deren Knick-Punkt näher am Ziel liegt
+    // (= größere Hauptbewegung zuerst, kleinere Korrektur zuletzt)
+    // cornerXZ→B = dz, cornerZX→B = dx
+    return dz <= dx ? optXZ : optZX;
+  }
+
+  // ── U-/S-Form: alle 6 möglichen Varianten mit Höhenunterschied ───────────
+  const variants: THREE.Vector3[][] = [
+    [A.clone(), new THREE.Vector3(B.x, A.y, A.z), new THREE.Vector3(B.x, B.y, A.z), B.clone()], // X → Y → Z
+    [A.clone(), new THREE.Vector3(A.x, A.y, B.z), new THREE.Vector3(A.x, B.y, B.z), B.clone()], // Z → Y → X
+    [A.clone(), new THREE.Vector3(B.x, A.y, A.z), new THREE.Vector3(B.x, A.y, B.z), B.clone()], // X → Z → Y
+    [A.clone(), new THREE.Vector3(A.x, A.y, B.z), new THREE.Vector3(B.x, A.y, B.z), B.clone()], // Z → X → Y
+    [A.clone(), new THREE.Vector3(A.x, B.y, A.z), new THREE.Vector3(B.x, B.y, A.z), B.clone()], // Y → X → Z
+    [A.clone(), new THREE.Vector3(A.x, B.y, A.z), new THREE.Vector3(A.x, B.y, B.z), B.clone()], // Y → Z → X
   ];
+  return pickBest(variants);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Schritt 3b: Trassen-Achse ermitteln
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Bestimmt die Hauptachse eines Elements (entlang welcher Richtung es verläuft).
+ * Wird als preferredAxis für makeOrthogonalPath verwendet damit das Kabel
+ * entlang der Trasse ankommt/abgeht statt quer dazu.
+ */
+function getElementOrientation(box: THREE.Box3): "X" | "Y" | "Z" {
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  if (size.y >= size.x && size.y >= size.z) return "Y";
+  if (size.x >= size.z) return "X";
+  return "Z";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Schritt 5: Collineare Punkte entfernen
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Entfernt Punkte die auf derselben Geraden liegen (collinear).
+ * Sie erzeugen keine Knicke aber unnötige Segmente in der Linie.
+ */
+function removeCollinearPoints(points: THREE.Vector3[]): THREE.Vector3[] {
+  if (points.length <= 2) return points;
+  const result = [points[0]];
+  for (let i = 1; i < points.length - 1; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const next = points[i + 1];
+    const dir1 = curr.clone().sub(prev).normalize();
+    const dir2 = next.clone().sub(curr).normalize();
+    // Knick vorhanden (dot < 1) → Punkt behalten; collinear → weglassen
+    if (dir1.dot(dir2) < 0.999) {
+      result.push(curr);
+    }
+  }
+  result.push(points[points.length - 1]);
+  return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fitting-Erkennung
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Erkennt ob ein Element ein Fitting ist (Kurve, T-Stück, Kreuzung).
+ *
+ * Kriterien (eines reicht):
+ *   1. IFC-Typ enthält "FITTING" (IfcCableTrayFitting, IfcDuctFitting …)
+ *   2. BoundingBox fast kubisch: kleinste Seite > 60 % der größten Seite —
+ *      bei Fittings sind alle Abmessungen ähnlich groß, kein klare Hauptachse.
+ */
+function isElementFitting(category: string, box: THREE.Box3 | null): boolean {
+  if (category.toUpperCase().includes("FITTING")) return true;
+  if (box) {
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const maxS = Math.max(size.x, size.y, size.z);
+    const minS = Math.min(size.x, size.y, size.z);
+    if (maxS > 0.01 && minS / maxS > 0.6) return true;
+  }
+  return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Nearest-Neighbour Sortierung der Kabelweg-Elemente
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Sortiert Kabelweg-Elemente in die optimale Reihenfolge.
+ *
+ * Algorithmus "Nearest Neighbour":
+ *   Startet am Mittelpunkt der Quelle, wählt immer das nächstgelegene noch
+ *   nicht besuchte Element — einfach und für typische Trassenverläufe gut.
+ *
+ * Gibt zurück: sortierte Liste + ob die Reihenfolge geändert wurde.
+ */
+function sortRouteElements(
+  sourceBox:  THREE.Box3 | null,
+  sourcePt:   THREE.Vector3,
+  route:      RouteElement[],
+  routeBoxes: (THREE.Box3 | null)[]
+): { sorted: RouteElement[]; wasReordered: boolean } {
+  if (route.length <= 1) return { sorted: [...route], wasReordered: false };
+
+  const getCenter = (i: number): THREE.Vector3 => {
+    const c = new THREE.Vector3();
+    if (routeBoxes[i]) routeBoxes[i]!.getCenter(c);
+    else c.copy(route[i].point);
+    return c;
+  };
+
+  let currentPos = new THREE.Vector3();
+  if (sourceBox) sourceBox.getCenter(currentPos);
+  else currentPos.copy(sourcePt);
+
+  const remaining = route.map((el, i) => ({ el, i }));
+  const sorted: RouteElement[] = [];
+
+  while (remaining.length > 0) {
+    let nearestIdx = 0;
+    let nearestDist = Infinity;
+    for (let j = 0; j < remaining.length; j++) {
+      const dist = currentPos.distanceTo(getCenter(remaining[j].i));
+      if (dist < nearestDist) { nearestDist = dist; nearestIdx = j; }
+    }
+    const { el, i } = remaining.splice(nearestIdx, 1)[0];
+    sorted.push(el);
+    currentPos = getCenter(i);
+  }
+
+  const wasReordered = sorted.some((el, i) => el.expressId !== route[i].expressId);
+  return { sorted, wasReordered };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -292,21 +447,22 @@ function makeOrthogonalPath(A: THREE.Vector3, B: THREE.Vector3): THREE.Vector3[]
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface RouteCalcResult {
-  pts:       THREE.Vector3[]; // alle Linienpunkte (für THREE.Line)
-  entryPts:  THREE.Vector3[]; // Eintrittspunkte auf Elementen (blau im Debug)
-  cornerPts: THREE.Vector3[]; // Knickpunkte vom orthogonalen Routing (gelb)
+  pts:        THREE.Vector3[]; // alle Linienpunkte (für THREE.Line)
+  entryPts:   THREE.Vector3[]; // Segment-Ein/Austrittspunkte (cyan im Debug)
+  cornerPts:  THREE.Vector3[]; // Knickpunkte vom orthogonalen Routing (gelb)
+  fittingPts: THREE.Vector3[]; // Fitting-Mittelpunkte (weiss im Debug)
 }
 
 /**
- * Berechnet für den gesamten Kabelweg einen vollständig orthogonalen Pfad.
+ * Berechnet den vollständig orthogonalen Kabelweg.
  *
- * Ablauf je Element (ausser Quelle):
- *   1. getOrthogonalConnectionPoint → Eintrittspunkt auf Element-Oberfläche
- *   2. clampToBBox → Korrektur damit kein Phantom-Punkt entsteht
- *   3. makeOrthogonalPath → L- oder U-förmige Verbindung zum Eintrittspunkt
+ * Elemente werden in zwei Kategorien unterteilt:
+ *   SEGMENT (gerade Trasse): hat eine klare Hauptachse → Ein- und Austrittspunkt
+ *     auf der Oberfläche, Routing mit bevorzugter Trassen-Achse.
+ *   FITTING (Kurve, T-Stück): annähernd kubische BBox → Mittelpunkt als
+ *     Durchgangspunkt, kein preferredAxis.
  *
- * Letztes Element: zusätzlich orthogonaler Pfad zum Mittelpunkt.
- * Fallback: wenn keine BBox vorhanden → orthogonaler Pfad zum Klick-Punkt.
+ * Fallback: wenn keine BBox → orthogonaler Pfad zum Klick-Punkt.
  */
 async function calculateRoutePoints(
   components: OBC.Components,
@@ -314,63 +470,109 @@ async function calculateRoutePoints(
   route:      RouteElement[],
   target:     PickedElement
 ): Promise<RouteCalcResult> {
+  // ── BoundingBoxen parallel laden ──────────────────────────────────────────
   const all   = [source, ...route, target];
   const boxes = await Promise.all(
     all.map((el) => getElementBBox(components, el.modelId, el.expressId))
   );
 
-  const pts:       THREE.Vector3[] = [];
-  const entryPts:  THREE.Vector3[] = [];
-  const cornerPts: THREE.Vector3[] = [];
+  // ── Schnellen Index-Lookup aufbauen (modelId:expressId → box) ─────────────
+  const boxByKey = new Map<string, THREE.Box3 | null>();
+  all.forEach((el, i) => boxByKey.set(`${el.modelId}:${el.expressId}`, boxes[i]));
+
+  const pts:        THREE.Vector3[] = [];
+  const entryPts:   THREE.Vector3[] = [];
+  const cornerPts:  THREE.Vector3[] = [];
+  const fittingPts: THREE.Vector3[] = [];
 
   for (let i = 0; i < all.length; i++) {
+    const el  = all[i];
     const box = boxes[i];
 
     if (i === 0) {
       // Quelle: Startpunkt = Mittelpunkt (oder Klick-Punkt wenn keine BBox)
-      if (box) {
-        const c = new THREE.Vector3();
-        box.getCenter(c);
-        pts.push(c);
-      } else {
-        pts.push(all[0].point.clone());
-      }
+      const start = new THREE.Vector3();
+      if (box) box.getCenter(start); else start.copy(el.point);
+      pts.push(start);
       continue;
     }
 
     const prevPt = pts[pts.length - 1];
+    const isLast = i === all.length - 1;
+
+    // Diagnose: Typ und Achse in Konsole ausgeben
+    if (box) {
+      const fitting = isElementFitting(el.category, box);
+      const axis    = fitting ? "—" : getElementOrientation(box);
+      console.log(`[Cable] #${el.expressId} ${el.category}: ${fitting ? "FITTING" : "SEGMENT"} / Achse: ${axis}`);
+    }
 
     if (!box) {
       // Kein BBox → orthogonaler Pfad zum gespeicherten Klick-Punkt
-      const seg = makeOrthogonalPath(prevPt, all[i].point.clone());
+      const seg = makeOrthogonalPath(prevPt, el.point.clone());
       cornerPts.push(...seg.slice(1, -1));
       pts.push(...seg.slice(1));
       continue;
     }
 
-    // ── Eintrittspunkt auf Element-Oberfläche berechnen ───────────────────
-    let entryPt = getOrthogonalConnectionPoint(prevPt, box);
-    entryPt = clampToBBox(entryPt, box);
-    entryPts.push(entryPt.clone());
-
-    // ── Orthogonaler Pfad vom letzten Punkt zum Eintrittspunkt ────────────
-    const seg = makeOrthogonalPath(prevPt, entryPt);
-    cornerPts.push(...seg.slice(1, -1)); // nur Zwischenpunkte (keine Start/Ziel)
-    pts.push(...seg.slice(1));
-
-    // ── Letztes Element: zusätzlich zum Mittelpunkt weiterrouten ──────────
-    if (i === all.length - 1) {
+    if (isElementFitting(el.category, box)) {
+      // ── FITTING ─────────────────────────────────────────────────────────
+      // Mittelpunkt als Durchgangspunkt — Richtung durch Nachbarelemente bestimmt
       const center = new THREE.Vector3();
       box.getCenter(center);
-      if (center.distanceTo(entryPt) > 0.1) {
-        const endSeg = makeOrthogonalPath(pts[pts.length - 1], center);
-        cornerPts.push(...endSeg.slice(1, -1));
-        pts.push(...endSeg.slice(1));
+      fittingPts.push(center.clone());
+
+      const seg = makeOrthogonalPath(prevPt, center, null);
+      cornerPts.push(...seg.slice(1, -1));
+      pts.push(...seg.slice(1));
+
+    } else {
+      // ── GERADES SEGMENT ─────────────────────────────────────────────────
+      const preferredAxis = getElementOrientation(box);
+
+      // Eintrittspunkt: Oberfläche die dem Vorgänger zugewandt ist
+      let entryPt = getOrthogonalConnectionPoint(prevPt, box);
+      entryPt = clampToBBox(entryPt, box);
+      entryPts.push(entryPt.clone());
+
+      // Orthogonaler Pfad zum Eintrittspunkt (bevorzugt Trassen-Achse)
+      const seg = makeOrthogonalPath(prevPt, entryPt, preferredAxis);
+      cornerPts.push(...seg.slice(1, -1));
+      pts.push(...seg.slice(1));
+
+      // Austrittspunkt: Oberfläche die dem nächsten Element zugewandt ist
+      const nextEl = all[i + 1];
+      if (nextEl) {
+        const nextBox = boxByKey.get(`${nextEl.modelId}:${nextEl.expressId}`) ?? null;
+        const nextCenter = new THREE.Vector3();
+        if (nextBox) nextBox.getCenter(nextCenter); else nextCenter.copy(nextEl.point);
+
+        let exitPt = getOrthogonalConnectionPoint(nextCenter, box);
+        exitPt = clampToBBox(exitPt, box);
+
+        if (exitPt.distanceTo(entryPt) > 0.05) {
+          entryPts.push(exitPt.clone()); // cyan: auch Austritte anzeigen
+          pts.push(exitPt.clone());
+        }
+      }
+
+      // Letztes Element (Ziel): zusätzlich zum Mittelpunkt weiterrouten
+      if (isLast) {
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+        const lastPt = pts[pts.length - 1];
+        if (center.distanceTo(lastPt) > 0.1) {
+          const endSeg = makeOrthogonalPath(lastPt, center, preferredAxis);
+          cornerPts.push(...endSeg.slice(1, -1));
+          pts.push(...endSeg.slice(1));
+        }
       }
     }
   }
 
-  return { pts, entryPts, cornerPts };
+  // Collineare Punkte entfernen
+  const cleanPts = removeCollinearPoints(pts);
+  return { pts: cleanPts, entryPts, cornerPts, fittingPts };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -386,9 +588,10 @@ async function calculateRoutePoints(
  *   window.debugCableRouting = false
  *
  * Farben:
- *   ROT  (r=0.08m) — alle finalen Linienpunkte
- *   GELB (r=0.10m) — Knickpunkte vom orthogonalen Routing
- *   BLAU (r=0.12m) — Eintrittspunkte auf Elementen
+ *   ROT     (r=0.08m) — alle finalen Linienpunkte
+ *   GELB    (r=0.10m) — Knickpunkte vom orthogonalen Routing
+ *   CYAN    (r=0.12m) — Segment-Ein/Austrittspunkte
+ *   WEISS   (r=0.14m) — Fitting-Mittelpunkte
  */
 function drawDebugSpheres(
   world:   OBC.World,
@@ -413,9 +616,10 @@ function drawDebugSpheres(
     }
   };
 
-  addSpheres(result.pts,       0xff2222, 0.08, 1000); // Rot:  alle Punkte
-  addSpheres(result.cornerPts, 0xffdd00, 0.10, 1001); // Gelb: Knickpunkte
-  addSpheres(result.entryPts,  0x4488ff, 0.12, 1002); // Blau: Eintrittspunkte
+  addSpheres(result.pts,        0xff2222, 0.08, 1000); // Rot:   alle Punkte
+  addSpheres(result.cornerPts,  0xffdd00, 0.10, 1001); // Gelb:  Knickpunkte
+  addSpheres(result.entryPts,   0x00eeff, 0.12, 1002); // Cyan:  Segment-Ein/Austritte
+  addSpheres(result.fittingPts, 0xffffff, 0.14, 1003); // Weiss: Fitting-Mittelpunkte
 
   world.scene.three.add(group);
 }
@@ -463,8 +667,27 @@ function okStep1() {
   renderPanel();
 }
 
-function okStep2() {
-  if (_rs.route.length === 0) return;
+async function okStep2() {
+  if (_rs.route.length === 0 || !_components) return;
+
+  // Optimale Reihenfolge bestimmen (Nearest Neighbour ab Quelle)
+  const sourceBox = _rs.source
+    ? await getElementBBox(_components, _rs.source.modelId, _rs.source.expressId)
+    : null;
+  const routeBoxes = await Promise.all(
+    _rs.route.map((el) => getElementBBox(_components!, el.modelId, el.expressId))
+  );
+  const { sorted, wasReordered } = sortRouteElements(
+    sourceBox,
+    _rs.source?.point ?? new THREE.Vector3(),
+    _rs.route,
+    routeBoxes
+  );
+  if (wasReordered) {
+    _rs.route = sorted;
+    _routeAutoSorted = true;
+  }
+
   _rs.step2 = "confirmed";
   _rs.step3 = "editing";
   renderPanel();
@@ -700,11 +923,15 @@ function buildSection2(): string {
 
   if (s === "confirmed") {
     const total = Math.round(_rs.route.reduce((acc, e) => acc + e.length, 0) * 10) / 10;
+    const sortBadge = _routeAutoSorted
+      ? `<span class="rp-sort-badge" title="Reihenfolge wurde automatisch optimiert">⚡ optimiert</span>`
+      : "";
     return `
       <div class="rp-section rp-section--confirmed">
         <div class="rp-section-title">
           <span class="rp-dot rp-dot--done">✓</span>② KABELWEG
           <span class="rp-count">${_rs.route.length} Element${_rs.route.length !== 1 ? "e" : ""}${total > 0 ? " · " + total + "m" : ""}</span>
+          ${sortBadge}
           <button class="rp-edit-btn" data-action="edit-step" data-step="2" title="Schritt bearbeiten">✎</button>
         </div>
       </div>`;
@@ -872,7 +1099,7 @@ function onPanelClick(e: Event) {
   const action = btn.dataset.action!;
 
   if (action === "ok-step1") { okStep1(); return; }
-  if (action === "ok-step2") { okStep2(); return; }
+  if (action === "ok-step2") { void okStep2(); return; }
   if (action === "ok-step3") { okStep3(); return; }
   if (action === "create-cable") { void confirmCable(); return; }
   if (action === "cancel-routing") { cancelRouting(); return; }
@@ -949,6 +1176,7 @@ function setupDragDrop() {
       if (_dragSrcIdx !== null && _dragSrcIdx !== dest) {
         const moved = _rs.route.splice(_dragSrcIdx, 1)[0];
         _rs.route.splice(dest, 0, moved);
+        _routeAutoSorted = false; // manuelle Sortierung überschreibt Auto-Sort
         renderPanel();
         syncRouteHighlight();
       }

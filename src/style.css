@@ -464,6 +464,7 @@ bim-grid[floating] .dashboard-card {
 .rp-section--confirmed .rp-section-title { color: #80c89a; background: #1a2820; }
 
 .rp-count { font-weight: normal; color: #668; margin-left: auto; font-size: 0.68rem; }
+.rp-sort-badge { font-size: 0.65rem; color: #f0b429; background: rgba(240,180,41,0.12); border-radius: 3px; padding: 1px 4px; margin-left: 4px; }
 
 /* Status dots in section title */
 .rp-dot { color: #444; font-size: 9px; flex-shrink: 0; }
