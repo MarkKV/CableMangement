@@ -1,7 +1,7 @@
 export const CONTENT_GRID_ID = "app-content";
-export const CONTENT_GRID_GAP = "1rem";
-export const SMALL_COLUMN_WIDTH = "22rem";
-export const MEDIUM_COLUMN_WIDTH = "25rem";
+export const CONTENT_GRID_GAP = "0";
+export const SMALL_COLUMN_WIDTH = "280px";
+export const MEDIUM_COLUMN_WIDTH = "320px";
 
 export const appIcons = {
   ADD: "mdi:plus",

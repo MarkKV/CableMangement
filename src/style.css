@@ -1,103 +1,138 @@
+/* ═══════════════════════════════════════════════════════════════
+   CABLEMGR  —  Design System v2
+   Autodesk Construction Cloud Style  ·  Light Theme
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── 1. DESIGN SYSTEM VARIABLES ────────────────────────────────────────── */
 :root {
-  /* Grayscale Colors */
-  --bim-ui_gray-0: hsl(220, 20%, 8%);
-  --bim-ui_gray-1: hsl(220, 15%, 12%);
-  --bim-ui_gray-2: hsl(220, 10%, 20%);
-  --bim-ui_gray-4: hsl(220, 5%, 30%);
-  --bim-ui_gray-6: hsl(220, 3%, 60%);
-  --bim-ui_gray-8: hsl(220, 2%, 60%);
-  --bim-ui_gray-9: hsl(220, 1%, 70%);
-  --bim-ui_gray-10: hsl(220, 0%, 80%);
+  /* Hintergründe */
+  --bg-app:        #f0f2f4;
+  --bg-panel:      #ffffff;
+  --bg-panel-2:    #f5f7f9;
+  --bg-row-hover:  #f0f4f8;
+  --bg-row-sel:    #e8f0fb;
+  --bg-input:      #ffffff;
+  --bg-topbar:     #1a1a2e;
+  --bg-viewer:     #2a2d35;
 
-  /* Brand Colors */
-  /* --bim-ui_main-base: #4179b5;
-  --bim-ui_accent-base: #28A745; */
+  /* Borders */
+  --border:        #dde2e8;
+  --border-2:      #c8d0da;
+  --border-focus:  #0696d7;
 
-  /* Brand Colors Contrasts */
-  --bim-ui_main-contrast: var(--bim-ui_gray-10);
-  --bim-ui_accent-contrast: var(--bim-ui_gray-0);
+  /* Text */
+  --text-primary:   #1a1a2e;
+  --text-secondary: #4a5568;
+  --text-muted:     #8a97a8;
+  --text-topbar:    #e8ecf0;
+  --text-white:     #ffffff;
+
+  /* Akzentfarben (ACC-Stil) */
+  --accent:        #0696d7;
+  --accent-hover:  #0578b0;
+  --accent-light:  #e8f4fb;
+  --orange:        #e8793a;
+  --orange-hover:  #cc6228;
+  --orange-light:  #fef0e8;
+
+  /* Status */
+  --ok:        #00875a;
+  --ok-light:  #e3f5ef;
+  --warn:      #e8793a;
+  --warn-light:#fef0e8;
+  --red:       #d93025;
+  --red-light: #fce8e6;
+
+  /* Schatten */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.10);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+  --shadow-xl: 0 16px 48px rgba(0,0,0,0.15);
+
+  /* Typografie */
+  --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+
+  /* Radien */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
 }
 
-/* Background Colors */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bim-ui_bg-base: var(--bim-ui_gray-0);
-    --bim-ui_bg-contrast-10: var(--bim-ui_gray-1);
-    --bim-ui_bg-contrast-20: var(--bim-ui_gray-2);
-    --bim-ui_bg-contrast-40: var(--bim-ui_gray-4);
-    --bim-ui_bg-contrast-60: var(--bim-ui_gray-6);
-    --bim-ui_bg-contrast-80: var(--bim-ui_gray-8);
-    --bim-ui_bg-contrast-100: var(--bim-ui_gray-10);
-  }
-}
+/* ─── 2. BIM LIGHT-THEME OVERRIDES ──────────────────────────────────────── */
+/* CSS Custom Properties kaskadieren durch Shadow-DOM-Grenzen,
+   deshalb reicht es, sie auf dem html-Element zu setzen. */
 
-@media (prefers-color-scheme: light) {
-  :root {
-    --bim-ui_bg-base: var(--bim-ui_gray-10);
-    --bim-ui_bg-contrast-10: var(--bim-ui_gray-9);
-    --bim-ui_bg-contrast-20: var(--bim-ui_gray-8);
-    --bim-ui_bg-contrast-40: var(--bim-ui_gray-6);
-    --bim-ui_bg-contrast-60: var(--bim-ui_gray-4);
-    --bim-ui_bg-contrast-80: var(--bim-ui_gray-2);
-    --bim-ui_bg-contrast-100: var(--bim-ui_gray-0);
-    --bim-ui_accent-base: #6528d7;
-  }
-}
-
-html.bim-ui-dark {
-  --bim-ui_bg-base: var(--bim-ui_gray-0);
-  --bim-ui_bg-contrast-10: var(--bim-ui_gray-1);
-  --bim-ui_bg-contrast-20: var(--bim-ui_gray-2);
-  --bim-ui_bg-contrast-40: var(--bim-ui_gray-4);
-  --bim-ui_bg-contrast-60: var(--bim-ui_gray-6);
-  --bim-ui_bg-contrast-80: var(--bim-ui_gray-8);
-  --bim-ui_bg-contrast-100: var(--bim-ui_gray-10);
-}
-
+html,
 html.bim-ui-light {
-  --bim-ui_bg-base: var(--bim-ui_gray-10);
-  --bim-ui_bg-contrast-10: var(--bim-ui_gray-9);
-  --bim-ui_bg-contrast-20: var(--bim-ui_gray-8);
-  --bim-ui_bg-contrast-40: var(--bim-ui_gray-6);
-  --bim-ui_bg-contrast-60: var(--bim-ui_gray-4);
-  --bim-ui_bg-contrast-80: var(--bim-ui_gray-2);
-  --bim-ui_bg-contrast-100: var(--bim-ui_gray-0);
-  --bim-ui_accent-base: var(--bim-ui_main-base);
+  --bim-ui_bg-base:         #ffffff;
+  --bim-ui_bg-contrast-10:  #f5f7f9;
+  --bim-ui_bg-contrast-20:  #edf0f4;
+  --bim-ui_bg-contrast-40:  #dde2e8;
+  --bim-ui_bg-contrast-60:  #8a97a8;
+  --bim-ui_bg-contrast-80:  #4a5568;
+  --bim-ui_bg-contrast-100: #1a1a2e;
+  --bim-ui_accent-base:     #0696d7;
+  --bim-ui_main-base:       #0696d7;
+  --bim-ui_main-contrast:   #ffffff;
+  --bim-ui_accent-contrast: #ffffff;
+  --bim-ui_gray-0:  #ffffff;
+  --bim-ui_gray-1:  #f5f7f9;
+  --bim-ui_gray-2:  #edf0f4;
+  --bim-ui_gray-4:  #dde2e8;
+  --bim-ui_gray-6:  #8a97a8;
+  --bim-ui_gray-8:  #4a5568;
+  --bim-ui_gray-9:  #2d3748;
+  --bim-ui_gray-10: #1a1a2e;
 }
 
+/* ─── 3. RESET & BASIS ───────────────────────────────────────────────────── */
 * {
   margin: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  background: var(--bg-app);
 }
 
 body {
   height: 100vh;
+  overflow: hidden;
+  background: var(--bg-app);
 }
 
-html {
-  font-family: sans-serif;
-  font-size: 17px;
+/* ─── 4. APP-SHELL & GRIDS ───────────────────────────────────────────────── */
+/* Alle nicht-floating Grids: kein Gap, kein Padding → bündiger Layout */
+bim-grid:not([floating]) {
+  background: var(--bg-app);
+  border-radius: 0;
+  gap: 0 !important;
+  padding: 0 !important;
+}
+
+bim-grid:not([floating]) > bim-panel {
+  background-color: var(--bg-panel);
+  border-radius: 0;
 }
 
 bim-grid[floating] {
   z-index: 100;
+  gap: 0 !important;
+  padding: 0 !important;
 }
 
-bim-grid:not([floating]) {
-  border-radius: 0;
-  background-color: var(--bim-ui_bg-contrast-10);
-}
-
+/* ─── 5. PANELS (Links / Rechts) ─────────────────────────────────────────── */
 bim-panel {
-  outline: 1px solid var(--bim-ui_bg-contrast-40);
-  border-radius: 0.25rem;
-}
-
-bim-grid:not([floating]) > bim-panel {
-  background-color: var(--bim-ui_bg-contrast-10);
+  outline: 1px solid var(--border);
+  border-radius: 0;
+  background-color: var(--bg-panel);
 }
 
 bim-panel-section {
-  --bim-panel-section_hc: var(--bim-ui_accent-base);
+  --bim-panel-section_hc: var(--accent);
   overflow: auto;
 }
 
@@ -106,20 +141,67 @@ bim-panel-section > bim-table {
 }
 
 :not(bim-panel) > bim-panel-section {
-  outline: 1px solid var(--bim-ui_bg-contrast-40);
-  border-radius: 0.25rem;
+  outline: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 
-bim-grid[floating] > bim-toolbar {
-  border: none;
-  justify-self: center;
-  outline: 1px solid var(--bim-ui_bg-contrast-40);
+/* ─── 6. DUNKLE TOPBAR (horizontale floating Toolbar) ───────────────────── */
+/* Nur die horizontale Toolbar (ohne [vertical]) wird zur dunklen Topbar.
+   CSS-Custom-Props kaskadieren durch Shadow DOM → interne Farben werden überschrieben. */
+
+bim-grid[floating] > bim-toolbar:not([vertical]) {
+  --bim-ui_bg-base:         #1a1a2e;
+  --bim-ui_bg-contrast-10:  #252840;
+  --bim-ui_bg-contrast-20:  #2e3258;
+  --bim-ui_bg-contrast-40:  rgba(255,255,255,0.14);
+  --bim-ui_bg-contrast-60:  #8a97a8;
+  --bim-ui_bg-contrast-80:  #c8d0da;
+  --bim-ui_bg-contrast-100: #e8ecf0;
+  --bim-ui_accent-base:     #0696d7;
+  --bim-ui_main-base:       #e8793a;
+  /* Aussehen */
+  background-color: #1a1a2e !important;
+  border: none !important;
+  outline: none !important;
+  border-bottom: 1px solid rgba(255,255,255,0.07) !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.35) !important;
+  justify-self: stretch !important;
+  align-self: stretch !important;
+  width: 100% !important;
 }
 
+/* Orange Primär-Button "Neues Kabel" */
+bim-toolbar bim-button.tb-new-cable {
+  background-color: var(--orange) !important;
+  color: white !important;
+  outline: none !important;
+  border-radius: var(--radius-sm) !important;
+}
+bim-toolbar bim-button.tb-new-cable:hover {
+  background-color: var(--orange-hover) !important;
+}
 
+/* Vertikale Tool-Toolbar → helles Glas-Panel im Viewer */
+bim-grid[floating] > bim-toolbar[vertical] {
+  --bim-ui_bg-base:         rgba(255,255,255,0.92);
+  --bim-ui_bg-contrast-10:  rgba(245,247,249,0.95);
+  --bim-ui_bg-contrast-40:  var(--border);
+  --bim-ui_bg-contrast-100: var(--text-primary);
+  --bim-ui_accent-base:     var(--accent);
+  background-color: rgba(255,255,255,0.92) !important;
+  border-radius: var(--radius-md) !important;
+  outline: 1px solid var(--border) !important;
+  box-shadow: var(--shadow-sm) !important;
+  margin: 8px 0 0 8px !important;
+  align-self: start !important;
+}
+
+/* ─── 7. KONTEXT-MENÜS ───────────────────────────────────────────────────── */
 bim-context-menu {
-  background-color: var(--bim-ui_bg-base);
-  outline: 1px solid var(--bim-ui_bg-contrast-40);
+  background-color: var(--bg-panel);
+  outline: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-md);
 }
 
 bim-context-menu bim-button {
@@ -127,47 +209,42 @@ bim-context-menu bim-button {
 }
 
 bim-context-menu bim-button[active] {
-  background-color: var(--bim-ui_main-base);
+  background-color: var(--accent);
 }
 
 bim-context-menu bim-dropdown {
-  --bim-input--bgc: transparent
+  --bim-input--bgc: transparent;
 }
 
 bim-context-menu bim-button:hover {
-  background-color: var(--bim-ui_main-base) !important;
+  background-color: var(--bg-row-hover) !important;
 }
 
 .context-style-a {
-  --bim-input--bgc: transparent
+  --bim-input--bgc: transparent;
 }
 
 .context-panel {
-  padding: 0; 
+  padding: 0;
   max-height: none;
 }
 
 .context-panel bim-dropdown {
-  --bim-input--bgc: var(
-    --bim-dropdown--bgc,
-    var(--bim-ui_bg-contrast-20)
-  )
+  --bim-input--bgc: var(--bim-dropdown--bgc, var(--bg-panel-2));
 }
 
+/* ─── 8. VIEWER / DASHBOARD-CARD ────────────────────────────────────────── */
 .dashboard-card {
-  padding: 1rem; 
-  display: flex; 
-  flex-direction: column; 
-  gap: 1rem; 
-  box-shadow: 0px 2px 8px var(--bim-ui_bg-contrast-10); 
-  border-radius: 0.25rem; 
-  outline: 1px solid var(--bim-ui_bg-contrast-40);
-  background-color: var(--bim-ui_bg-contrast-10);
-  overflow: auto;
+  padding: 0;
+  background-color: var(--bg-viewer);
+  border-radius: 0;
+  box-shadow: none;
+  outline: none;
+  overflow: hidden;
 }
 
 bim-grid[floating] .dashboard-card {
-  background-color: var(--bim-ui_bg-base);
+  background-color: transparent;
   height: fit-content;
 }
 
@@ -176,48 +253,58 @@ bim-grid[floating] .dashboard-card {
 }
 
 .card-label {
-  font-size: 0.9rem;
-  color: var(--bim-ui_accent-base);
-  font-weight: bold;
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 600;
   flex-shrink: 0;
 }
 
 .viewer-message-label {
   justify-self: center;
-  background-color: #dad588;
-  padding: 0.75rem;
-  border-radius: 0.25rem;
-  color: #424025;
+  background: var(--orange-light);
+  border: 1px solid var(--orange);
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  color: var(--orange);
+  font-size: 12px;
+  font-weight: 500;
 }
 
+/* ─── 9. SEITENLEISTE (linke Icon-Rail) ─────────────────────────────────── */
 .sidebar {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 4px;
 }
 
-/* ─── Cable Management ───────────────────────────────────────────────────── */
-
+/* ─── 10. KABEL-MANAGEMENT BASIS (.cm-cable-*) ──────────────────────────── */
 .cm-cable-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .cm-empty {
-  color: var(--bim-ui_bg-contrast-60);
-  font-size: 0.8rem;
-  padding: 0.5rem 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 8px 0;
 }
 
 .cm-cable-entry {
-  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
-  background: var(--bim-ui_bg-contrast-20);
-  border-radius: 0.25rem;
+  padding: 8px 10px 8px 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 3px;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.cm-cable-entry:hover {
+  background: var(--bg-row-hover);
+  border-color: var(--border-2);
 }
 
 .cm-cable-header {
@@ -227,135 +314,157 @@ bim-grid[floating] .dashboard-card {
 }
 
 .cm-cable-id {
-  font-weight: bold;
-  font-size: 0.8rem;
-  color: var(--bim-ui_bg-contrast-100);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
 }
 
 .cm-cable-status {
-  font-size: 0.75rem;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .cm-cable-name {
-  font-size: 0.8rem;
-  color: var(--bim-ui_bg-contrast-80);
+  font-size: 12px;
+  color: var(--text-primary);
 }
 
 .cm-cable-info {
-  font-size: 0.75rem;
-  color: var(--bim-ui_bg-contrast-60);
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .cm-cable-route {
-  font-size: 0.75rem;
-  color: var(--bim-ui_bg-contrast-60);
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
-/* ─── New Cable Modal ────────────────────────────────────────────────────── */
-
+/* ─── 11. NEUES-KABEL-MODAL (.cm-*) ─────────────────────────────────────── */
 #new-cable-modal {
-  background: var(--bim-ui_bg-contrast-10, #1a1d23);
-  border: 1px solid var(--bim-ui_bg-contrast-40, #3d4050);
-  border-radius: 0.5rem;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
   padding: 0;
-  color: var(--bim-ui_bg-contrast-100, white);
-  min-width: 340px;
+  color: var(--text-primary);
+  min-width: 380px;
+  font-family: var(--font-sans);
 }
 
 #new-cable-modal::backdrop {
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.40);
+  backdrop-filter: blur(4px);
 }
 
 .cm-modal {
-  padding: 1.5rem;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 12px;
 }
 
+/* Negativer Margin: Titel bündig mit Modal-Rändern, trotz Padding */
 .cm-modal-title {
-  font-size: 1rem;
-  font-weight: bold;
-  color: var(--bim-ui_accent-base, #6528d7);
-  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: -20px -20px 4px;
+  padding: 14px 20px;
+  background: var(--bg-panel-2);
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
 .cm-field {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 5px;
 }
 
 .cm-field label {
-  font-size: 0.8rem;
-  color: var(--bim-ui_bg-contrast-60, #888);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .cm-field input,
 .cm-field select {
-  background: var(--bim-ui_bg-contrast-20, #2a2d35);
-  border: 1px solid var(--bim-ui_bg-contrast-40, #3d4050);
-  border-radius: 0.25rem;
-  color: var(--bim-ui_bg-contrast-100, white);
-  padding: 0.4rem 0.6rem;
-  font-size: 0.85rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: var(--font-sans);
   outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .cm-field input:focus,
 .cm-field select:focus {
-  border-color: var(--bim-ui_accent-base, #6528d7);
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-light);
 }
 
 .cm-modal-buttons {
   display: flex;
-  gap: 0.5rem;
+  gap: 8px;
   justify-content: flex-end;
-  margin-top: 0.5rem;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
 
 .cm-btn-primary {
-  background: var(--bim-ui_accent-base, #6528d7);
+  background: var(--accent);
   color: white;
   border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 0.25rem;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  transition: background 0.15s;
 }
 
 .cm-btn-primary:hover {
-  filter: brightness(1.2);
+  background: var(--accent-hover);
 }
 
 .cm-btn-secondary {
-  background: var(--bim-ui_bg-contrast-20, #2a2d35);
-  color: var(--bim-ui_bg-contrast-100, white);
-  border: 1px solid var(--bim-ui_bg-contrast-40, #3d4050);
-  padding: 0.5rem 1rem;
-  border-radius: 0.25rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 13px;
+  font-family: var(--font-sans);
+  transition: background 0.15s;
 }
 
 .cm-btn-secondary:hover {
-  background: var(--bim-ui_bg-contrast-40, #3d4050);
+  background: var(--bg-row-hover);
 }
 
 .cm-catalog-link {
-  font-size: 0.75rem;
-  color: var(--bim-ui_accent-base, #6528d7);
+  font-size: 11px;
+  color: var(--accent);
   cursor: pointer;
-  text-decoration: underline;
-  margin-left: 0.25rem;
+  text-decoration: none;
+  margin-left: 6px;
+  font-weight: 500;
 }
 
 .cm-catalog-link:hover {
-  opacity: 0.8;
+  text-decoration: underline;
 }
 
-/* ─── Routing Panel ──────────────────────────────────────────────────────── */
-
+/* ─── 12. ROUTING-PANEL (.rp-*) ──────────────────────────────────────────── */
 @keyframes rp-pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.4; }
@@ -367,209 +476,235 @@ bim-grid[floating] .dashboard-card {
   right: -360px;
   width: 320px;
   height: 100vh;
-  background: #1a1d23;
-  border-left: 1px solid #3d4050;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
   z-index: 500;
   display: flex;
   flex-direction: column;
   transition: right 0.3s ease;
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-lg);
   font-size: 13px;
-  color: #d0d4de;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
 }
 
 .rp-panel--open { right: 0; }
 
 /* Header */
 .rp-header {
-  padding: 0.75rem 1rem 0.6rem;
-  border-bottom: 1px solid #2d3040;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel-2);
   flex-shrink: 0;
 }
 
 .rp-header-title {
-  font-size: 0.7rem;
-  font-weight: bold;
-  letter-spacing: 0.09em;
-  color: var(--bim-ui_accent-base, #6528d7);
-  margin-bottom: 0.15rem;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 3px;
 }
 
-.rp-header-sub { font-size: 0.72rem; color: #666; }
+.rp-header-sub {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 500;
+  font-family: var(--font-mono);
+}
 
-/* Progress bar */
+/* Fortschritts-Anzeige */
 .rp-progress {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
-  padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid #2d3040;
+  gap: 6px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  background: #1c1f28;
+  background: var(--bg-panel);
 }
 
 .rp-prog-step {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  font-size: 0.7rem;
+  gap: 4px;
+  font-size: 11px;
 }
 
-.rp-prog-dot {
-  font-size: 9px;
-}
+.rp-prog-dot              { font-size: 9px; }
+.rp-prog-dot--done        { color: var(--ok); }
+.rp-prog-dot--active      { color: var(--orange); animation: rp-pulse 1.4s ease-in-out infinite; }
+.rp-prog-dot--off         { color: var(--border-2); }
 
-.rp-prog-dot--done  { color: #00e67a; }
-.rp-prog-dot--active {
-  color: #ffaa00;
-  animation: rp-pulse 1.4s ease-in-out infinite;
-}
-.rp-prog-dot--off   { color: #333; }
+.rp-prog-label { color: var(--text-secondary); font-size: 11px; }
+.rp-prog-arrow { color: var(--border-2); font-size: 10px; }
 
-.rp-prog-label { color: #888; font-size: 0.68rem; }
-.rp-prog-arrow { color: #333; font-size: 0.65rem; }
-
-/* Scrollable body */
+/* Scrollbarer Body */
 .rp-body {
   flex: 1;
   overflow-y: auto;
-  padding: 0.6rem;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 8px;
 }
 
-/* Section base */
+/* Schritt-Sektionen */
 .rp-section {
-  border: 1px solid #2a2d3a;
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   overflow: hidden;
+  background: var(--bg-panel);
 }
 
 .rp-section--active {
-  border-color: #ffaa00;
+  border-color: var(--accent);
 }
 
 .rp-section--confirmed {
-  border-color: #1e4a2a;
-  background: rgba(0, 230, 122, 0.03);
+  border-color: var(--ok);
 }
 
 .rp-section--inactive {
-  opacity: 0.45;
+  opacity: 0.5;
 }
 
 .rp-section-title {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.45rem 0.65rem;
-  font-weight: bold;
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  background: #1e2230;
-  color: #9098b0;
+  gap: 6px;
+  padding: 9px 12px;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  background: var(--bg-panel-2);
+  color: var(--text-secondary);
 }
 
-.rp-section--active   .rp-section-title { color: #e8ecf8; background: #232840; }
-.rp-section--confirmed .rp-section-title { color: #80c89a; background: #1a2820; }
+.rp-section--active    .rp-section-title { color: var(--accent);  background: var(--accent-light); }
+.rp-section--confirmed .rp-section-title { color: var(--ok);     background: var(--ok-light); }
 
-.rp-count { font-weight: normal; color: #668; margin-left: auto; font-size: 0.68rem; }
-.rp-sort-badge { font-size: 0.65rem; color: #f0b429; background: rgba(240,180,41,0.12); border-radius: 3px; padding: 1px 4px; margin-left: 4px; }
+.rp-count {
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: auto;
+  font-size: 10px;
+}
 
-/* Status dots in section title */
-.rp-dot { color: #444; font-size: 9px; flex-shrink: 0; }
-.rp-dot--done   { color: #00e67a; }
-.rp-dot--active { color: #ffaa00; animation: rp-pulse 1.4s ease-in-out infinite; }
+.rp-sort-badge {
+  font-size: 10px;
+  color: var(--orange);
+  background: var(--orange-light);
+  border-radius: 3px;
+  padding: 1px 5px;
+  margin-left: 4px;
+  font-weight: 500;
+}
 
-/* Edit button */
+/* Status-Punkte im Sektions-Titel */
+.rp-dot         { color: var(--border-2); font-size: 9px; flex-shrink: 0; }
+.rp-dot--done   { color: var(--ok); }
+.rp-dot--active { color: var(--accent); animation: rp-pulse 1.4s ease-in-out infinite; }
+
+/* Bearbeiten-Button */
 .rp-edit-btn {
   margin-left: auto;
   background: none;
-  border: 1px solid #2a4030;
-  color: #668866;
-  font-size: 0.75rem;
-  padding: 1px 6px;
-  border-radius: 3px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  font-family: var(--font-sans);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
-.rp-edit-btn:hover { color: #00e67a; border-color: #00e67a; }
+.rp-edit-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
 
-/* Compact confirmed view */
+/* Kompakt-Ansicht (abgeschlossener Schritt) */
 .rp-section-compact {
-  padding: 0.4rem 0.65rem;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 2px;
 }
-.rp-compact-name { font-size: 0.75rem; color: #b0c0b8; }
-.rp-compact-cat  { font-size: 0.65rem; color: #4a6050; }
+.rp-compact-name { font-size: 12px; color: var(--text-primary); font-weight: 500; }
+.rp-compact-cat  { font-size: 11px; color: var(--text-muted); }
 
-/* Locked/inactive message */
+/* Gesperrt / inaktiv */
 .rp-section-locked {
-  padding: 0.4rem 0.65rem;
-  font-size: 0.7rem;
-  color: #3a3e50;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--text-muted);
   font-style: italic;
 }
 
-/* Section body (editing) */
+/* Schritt-Body (aktive Bearbeitung) */
 .rp-section-body {
-  padding: 0.5rem 0.6rem;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  background: #1c1f28;
+  gap: 8px;
+  background: var(--bg-panel);
 }
 
-/* Placeholder */
+/* Platzhalter-Text */
 .rp-placeholder {
-  color: #556;
-  font-size: 0.72rem;
-  line-height: 1.5;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
 }
-.rp-ph-sub { color: #445; font-size: 0.65rem; }
+.rp-ph-sub { color: var(--border-2); font-size: 11px; }
 
-/* OK button */
+/* OK-Button */
 .rp-ok-btn {
   align-self: flex-end;
-  background: #3d8bff;
+  background: var(--accent);
   color: white;
   border: none;
-  padding: 0.35rem 1rem;
-  border-radius: 4px;
+  padding: 7px 20px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 0.78rem;
-  font-weight: bold;
-  transition: filter 0.15s;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  transition: background 0.15s;
 }
-.rp-ok-btn:hover:not(:disabled) { filter: brightness(1.15); }
+.rp-ok-btn:hover:not(:disabled) { background: var(--accent-hover); }
 .rp-ok-btn--disabled,
 .rp-ok-btn:disabled {
-  background: #252830 !important;
-  color: #445 !important;
+  background: var(--border) !important;
+  color: var(--text-muted) !important;
   cursor: not-allowed !important;
 }
 
-/* Table (source / target) */
+/* Tabelle (Quelle / Ziel) */
 .rp-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.72rem;
+  font-size: 12px;
 }
 .rp-table th {
-  padding: 0.3rem 0.45rem;
-  background: #181b22;
-  color: #556;
-  font-weight: normal;
+  padding: 6px 10px;
+  background: var(--bg-panel-2);
+  color: var(--text-muted);
+  font-weight: 600;
   text-align: left;
-  border-bottom: 1px solid #252830;
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 .rp-table td {
-  padding: 0.35rem 0.45rem;
-  border-bottom: 1px solid #1c1f28;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
   vertical-align: middle;
 }
 .rp-td-name {
@@ -577,56 +712,58 @@ bim-grid[floating] .dashboard-card {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #c0c8d8;
+  color: var(--text-primary);
+  font-weight: 500;
 }
 .rp-td-cat {
   max-width: 80px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #668;
-  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-size: 11px;
 }
 .rp-td-len {
-  color: #668;
+  color: var(--text-secondary);
   text-align: right;
   white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
-  font-size: 0.68rem;
 }
 
-/* ✕ button */
+/* ✕ Löschen-Button in Tabelle */
 .rp-x {
   background: none;
   border: none;
-  color: #445;
+  color: var(--text-muted);
   cursor: pointer;
-  font-size: 0.72rem;
-  padding: 2px 4px;
-  border-radius: 3px;
+  font-size: 12px;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
   transition: color 0.15s, background 0.15s;
 }
-.rp-x:hover { color: #ff4455; background: rgba(255,68,85,0.12); }
+.rp-x:hover { color: var(--red); background: var(--red-light); }
 
-/* Route element drag rows */
+/* Drag-Zeilen (Kabelweg-Elemente) */
 .rp-trasse-list { max-height: 160px; overflow-y: auto; }
 
 .rp-trasse-row {
   display: grid;
   grid-template-columns: 16px 1fr auto auto auto;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.3rem 0.45rem;
-  border-bottom: 1px solid #1c1f28;
+  gap: 4px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
   cursor: grab;
   transition: background 0.12s;
 }
-.rp-trasse-row:hover          { background: #20232e; }
-.rp-trasse-row.rp-drag-over   { border-top: 2px solid #ffaa00; }
+.rp-trasse-row:hover          { background: var(--bg-row-hover); }
+.rp-trasse-row.rp-drag-over   { border-top: 2px solid var(--accent); }
 .rp-trasse-row.rp-dragging    { opacity: 0.35; }
 
 .rp-drag-handle {
-  color: #334;
+  color: var(--border-2);
   font-size: 12px;
   cursor: grab;
   user-select: none;
@@ -635,119 +772,131 @@ bim-grid[floating] .dashboard-card {
 .rp-trasse-total {
   display: grid;
   grid-template-columns: 16px 1fr auto auto auto;
-  gap: 0.25rem;
-  padding: 0.3rem 0.45rem;
-  font-size: 0.7rem;
-  font-weight: bold;
-  color: #668;
-  border-top: 1px solid #2a2d3a;
-  background: #181b22;
+  gap: 4px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel-2);
 }
 
 .rp-drag-hint {
-  font-size: 0.63rem;
-  color: #334;
+  font-size: 10px;
+  color: var(--text-muted);
   font-style: italic;
   text-align: center;
-  padding: 0.1rem 0;
+  padding: 2px 0;
 }
 
-/* Summary */
+/* Zusammenfassung */
 .rp-summary {
-  background: #1c1f28;
-  border: 1px solid #2a2d3a;
-  border-radius: 6px;
-  padding: 0.55rem 0.65rem;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
 }
 .rp-summary-title {
-  font-size: 0.62rem;
-  font-weight: bold;
-  letter-spacing: 0.08em;
-  color: #445;
-  margin-bottom: 0.35rem;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
 }
 .rp-summary-row {
   display: flex;
   justify-content: space-between;
-  font-size: 0.72rem;
-  padding: 0.12rem 0;
-  color: #778;
+  font-size: 12px;
+  padding: 2px 0;
+  color: var(--text-primary);
 }
-.rp-summary-row span:first-child { color: #556; }
+.rp-summary-row span:first-child { color: var(--text-secondary); }
 
-.rp-ok { color: #00e67a; margin-left: 0.25rem; }
+.rp-ok { color: var(--ok); margin-left: 4px; font-weight: 500; }
 
-/* Action buttons */
+/* Aktions-Buttons (unten im Panel) */
 .rp-actions {
-  padding: 0.65rem;
-  border-top: 1px solid #2a2d3a;
+  padding: 12px;
+  border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 6px;
   flex-shrink: 0;
+  background: var(--bg-panel);
 }
 
 .rp-btn-primary {
-  background: var(--bim-ui_accent-base, #6528d7);
+  background: var(--accent);
   color: white;
   border: none;
-  padding: 0.55rem;
-  border-radius: 5px;
+  padding: 10px;
+  border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 0.82rem;
-  font-weight: bold;
-  transition: filter 0.15s;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  transition: background 0.15s;
 }
-.rp-btn-primary:hover:not(:disabled) { filter: brightness(1.2); }
+.rp-btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
 .rp-btn--disabled,
 .rp-btn-primary:disabled {
-  background: #252830 !important;
-  color: #445 !important;
+  background: var(--border) !important;
+  color: var(--text-muted) !important;
   cursor: not-allowed !important;
 }
 
 .rp-btn-cancel {
-  background: #1c1f28;
-  color: #778;
-  border: 1px solid #2a2d3a;
-  padding: 0.45rem;
-  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  padding: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 0.78rem;
-  transition: background 0.15s, color 0.15s;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  transition: all 0.15s;
 }
-.rp-btn-cancel:hover { background: rgba(255,68,85,0.1); color: #ff4455; border-color: #ff4455; }
+.rp-btn-cancel:hover {
+  background: var(--red-light);
+  color: var(--red);
+  border-color: var(--red);
+}
 
-/* Hover tooltip */
+/* Hover-Tooltip im Viewer */
 .rp-tooltip {
   position: fixed;
-  background: rgba(0,0,0,.88);
-  color: white;
-  font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 4px;
+  background: var(--bg-topbar);
+  color: var(--text-topbar);
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
   pointer-events: none;
   z-index: 10000;
   display: none;
+  box-shadow: var(--shadow-md);
+  font-family: var(--font-sans);
 }
 
-/* Error toast */
+/* Fehler-Toast */
 .rp-toast {
   position: fixed;
   top: 20px;
   left: 50%;
   transform: translateX(-50%);
-  background: #ff4455;
+  background: var(--red);
   color: white;
   padding: 8px 20px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   z-index: 10000;
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 500;
   pointer-events: none;
+  box-shadow: var(--shadow-md);
+  font-family: var(--font-sans);
 }
 
-/* ─── Cable List Window ─────────────────────────────────────────────────── */
-
+/* ─── 13. KABELLISTE-FENSTER (.cw-*) ─────────────────────────────────────── */
 .cw-window {
   position: fixed;
   top: 80px;
@@ -757,15 +906,16 @@ bim-grid[floating] .dashboard-card {
   max-width: calc(100vw - 40px);
   height: 520px;
   max-height: calc(100vh - 120px);
-  background: #0a1628;
-  border: 1px solid #1a3050;
-  border-radius: 8px;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(61,139,255,0.1);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
   z-index: 800;
   display: none;
   flex-direction: column;
   font-size: 13px;
-  color: #c8d8e8;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
   overflow: hidden;
 }
 
@@ -774,9 +924,10 @@ bim-grid[floating] .dashboard-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem;
-  background: #071020;
-  border-bottom: 1px solid #1a3050;
+  padding: 12px 16px;
+  background: var(--bg-panel-2);
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   cursor: grab;
   user-select: none;
   flex-shrink: 0;
@@ -785,35 +936,39 @@ bim-grid[floating] .dashboard-card {
 .cw-header:active { cursor: grabbing; }
 
 .cw-title {
-  font-size: 0.72rem;
-  font-weight: bold;
-  letter-spacing: 0.1em;
-  color: #4a90d9;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 8px;
 }
 
 .cw-count {
-  background: #3d8bff;
+  background: var(--accent);
   color: white;
-  font-size: 0.65rem;
-  font-weight: bold;
-  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
   border-radius: 10px;
 }
 
 .cw-close {
-  background: none;
-  border: 1px solid #1a3050;
-  color: #6a90b0;
-  font-size: 0.75rem;
-  padding: 4px 10px;
-  border-radius: 4px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  font-family: var(--font-sans);
+  transition: all 0.15s;
 }
-.cw-close:hover { color: #ff4455; border-color: #ff4455; }
+.cw-close:hover {
+  background: var(--red-light);
+  color: var(--red);
+  border-color: var(--red);
+}
 
 /* Body */
 .cw-body {
@@ -822,63 +977,65 @@ bim-grid[floating] .dashboard-card {
   padding: 0;
 }
 
-/* Empty state */
+/* Leer-Zustand */
 .cw-empty-msg {
-  padding: 2rem 1.5rem;
-  color: #3a5070;
+  padding: 40px 24px;
+  color: var(--text-muted);
   text-align: center;
-  font-size: 0.82rem;
+  font-size: 13px;
   line-height: 1.8;
 }
-.cw-empty-sub { color: #2a3848; font-size: 0.72rem; }
+.cw-empty-sub { color: var(--border-2); font-size: 12px; }
 
-/* Table */
+/* Tabelle */
 .cw-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.75rem;
+  font-size: 12px;
 }
 
 .cw-table thead tr {
-  background: #071020;
+  background: var(--bg-panel-2);
   position: sticky;
   top: 0;
   z-index: 1;
 }
 
 .cw-table th {
-  padding: 0.5rem 0.75rem;
+  padding: 8px 12px;
   text-align: left;
   font-weight: 600;
-  color: #4a7090;
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
-  border-bottom: 1px solid #1a3050;
+  color: var(--text-secondary);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-bottom: 2px solid var(--border);
   white-space: nowrap;
 }
 
 .cw-row {
   cursor: pointer;
-  border-bottom: 1px solid #0e1f35;
-  transition: background 0.12s;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  transition: background 0.1s;
 }
-.cw-row:nth-child(odd)  { background: #0a1628; }
-.cw-row:nth-child(even) { background: #0c1e38; }
-.cw-row:hover           { background: #122540; }
+.cw-row:hover { background: var(--bg-row-hover); }
 
 .cw-row--sel {
-  background: #0d2550 !important;
-  box-shadow: inset 3px 0 0 #3d8bff;
+  background: var(--bg-row-sel) !important;
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .cw-table td {
-  padding: 0.45rem 0.75rem;
+  padding: 8px 12px;
   vertical-align: middle;
+  color: var(--text-primary);
 }
 
 .cw-id {
-  font-weight: bold;
-  font-size: 0.78rem;
+  font-weight: 600;
+  font-size: 12px;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -894,27 +1051,29 @@ bim-grid[floating] .dashboard-card {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #7a9ab8;
+  color: var(--text-secondary);
 }
 
 .cw-td-len {
   text-align: right;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  color: #7a9ab8;
+  color: var(--text-secondary);
   white-space: nowrap;
+  font-size: 11px;
 }
 
 .cw-badge {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
+  padding: 2px 10px;
+  border-radius: 12px;
   border: 1px solid;
-  font-size: 0.68rem;
+  font-size: 10px;
   white-space: nowrap;
-  font-weight: 600;
+  font-weight: 500;
 }
 
-/* Action buttons */
+/* Aktions-Buttons */
 .cw-td-act {
   white-space: nowrap;
   text-align: right;
@@ -923,88 +1082,97 @@ bim-grid[floating] .dashboard-card {
 .cw-act-btn {
   background: none;
   border: 1px solid transparent;
-  color: #3a5070;
-  font-size: 0.8rem;
-  padding: 2px 6px;
-  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  transition: all 0.12s;
   margin-left: 2px;
 }
-.cw-act-view:hover { color: #3d8bff; border-color: #3d8bff40; background: #3d8bff10; }
-.cw-act-del:hover  { color: #ff4455; border-color: #ff445540; background: #ff445510; }
+.cw-act-view:hover {
+  color: var(--accent);
+  border-color: rgba(6,150,215,0.25);
+  background: var(--accent-light);
+}
+.cw-act-del:hover {
+  color: var(--red);
+  border-color: rgba(217,48,37,0.25);
+  background: var(--red-light);
+}
 
-/* Delete confirmation overlay (inside window) */
+/* Lösch-Bestätigung (Overlay) */
 .cw-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(7, 16, 32, 0.85);
+  background: rgba(240,242,244,0.85);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 10;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 
 .cw-confirm {
-  background: #0c1e38;
-  border: 1px solid #1a4060;
-  border-radius: 8px;
-  padding: 1.5rem 2rem;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 24px 32px;
   text-align: center;
   min-width: 280px;
 }
 
 .cw-confirm p {
-  margin-bottom: 1.2rem;
-  font-size: 0.85rem;
-  color: #c8d8e8;
-  line-height: 1.5;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.6;
 }
 
 .cw-confirm-btns {
   display: flex;
-  gap: 0.75rem;
+  gap: 10px;
   justify-content: center;
 }
 
 .cw-del-yes {
-  background: #ff4455;
+  background: var(--red);
   color: white;
   border: none;
-  padding: 0.5rem 1.2rem;
-  border-radius: 5px;
+  padding: 8px 20px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 0.82rem;
-  font-weight: bold;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-sans);
   transition: filter 0.12s;
 }
-.cw-del-yes:hover { filter: brightness(1.15); }
+.cw-del-yes:hover { filter: brightness(1.1); }
 
 .cw-del-no {
-  background: #122540;
-  color: #7a9ab8;
-  border: 1px solid #1a3050;
-  padding: 0.5rem 1.2rem;
-  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  padding: 8px 20px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 0.82rem;
+  font-size: 13px;
+  font-family: var(--font-sans);
   transition: background 0.12s;
 }
-.cw-del-no:hover { background: #1a3050; }
+.cw-del-no:hover { background: var(--bg-row-hover); }
 
-/* ═══════════════════════════════════════════════════════════════
-   KABELKATALOG-FENSTER  (.kk-*)
-   ═══════════════════════════════════════════════════════════════ */
-
+/* ─── 14. KABELKATALOG-FENSTER (.kk-*) ──────────────────────────────────── */
 .kk-window {
   position: fixed;
   width: 900px;
   height: 600px;
-  background: #1c1f2e;
-  border: 1px solid #2a2f42;
-  border-radius: 8px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.65);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
   display: none;
   flex-direction: column;
   z-index: 10001;
@@ -1012,7 +1180,8 @@ bim-grid[floating] .dashboard-card {
   top: 50%;
   transform: translate(-50%, -50%);
   font-size: 12px;
-  color: #c0c8e8;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
   overflow: hidden;
 }
 
@@ -1020,69 +1189,82 @@ bim-grid[floating] .dashboard-card {
 .kk-header {
   display: flex;
   align-items: center;
-  padding: 0 12px;
-  height: 40px;
-  background: #12151f;
-  border-bottom: 1px solid #2a2f42;
-  border-radius: 8px 8px 0 0;
+  padding: 0 14px;
+  height: 44px;
+  background: var(--bg-panel-2);
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   cursor: move;
   user-select: none;
   flex-shrink: 0;
-  gap: 8px;
+  gap: 10px;
 }
+
 .kk-title {
-  font-size: 0.72rem;
-  font-weight: bold;
-  color: #e8ecf8;
-  letter-spacing: 0.06em;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
   flex: 1;
 }
+
 .kk-header-actions { display: flex; align-items: center; gap: 6px; }
+
 .kk-btn-sm {
-  background: #252a3a;
-  border: 1px solid #353a52;
-  color: #c0c8e8;
-  border-radius: 4px;
-  padding: 3px 9px;
-  font-size: 0.64rem;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  font-size: 11px;
+  font-family: var(--font-sans);
   cursor: pointer;
+  transition: all 0.15s;
 }
-.kk-btn-sm:hover { background: #353a52; color: #fff; }
+.kk-btn-sm:hover {
+  background: var(--bg-row-hover);
+  color: var(--text-primary);
+  border-color: var(--border-2);
+}
+
 .kk-close {
   background: none;
   border: none;
-  color: #556;
-  font-size: 15px;
+  color: var(--text-muted);
+  font-size: 16px;
   cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 3px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
   line-height: 1;
+  transition: all 0.15s;
 }
-.kk-close:hover { color: #ff4455; background: rgba(255,68,85,0.12); }
+.kk-close:hover { color: var(--red); background: var(--red-light); }
 
 /* Tabs */
 .kk-tabs {
   display: flex;
-  border-bottom: 1px solid #2a2f42;
-  background: #12151f;
+  border-bottom: 2px solid var(--border);
+  background: var(--bg-panel);
   flex-shrink: 0;
 }
+
 .kk-tab {
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
-  color: #557;
-  padding: 8px 18px;
+  margin-bottom: -2px;
+  color: var(--text-secondary);
+  padding: 10px 20px;
   cursor: pointer;
-  font-size: 0.68rem;
-  font-weight: bold;
-  letter-spacing: 0.06em;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  letter-spacing: 0.3px;
   transition: color 0.1s;
 }
-.kk-tab:hover { color: #c0c8e8; }
-.kk-tab--active { color: #e8ecf8; border-bottom-color: #5c7cfa; }
+.kk-tab:hover     { color: var(--text-primary); }
+.kk-tab--active   { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
 
-/* Content area */
+/* Inhalt */
 .kk-content {
   flex: 1;
   overflow: hidden;
@@ -1090,43 +1272,52 @@ bim-grid[floating] .dashboard-card {
   flex-direction: column;
 }
 
-/* Split layout: left table 60%, right form 40% */
 .kk-split { display: flex; height: 100%; overflow: hidden; }
+
 .kk-split-left {
   flex: 0 0 58%;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #2a2f42;
+  border-right: 1px solid var(--border);
   overflow: hidden;
 }
+
 .kk-split-right {
   flex: 1;
   overflow-y: auto;
-  padding: 14px 14px 14px 16px;
+  padding: 16px;
+  background: var(--bg-panel);
 }
 
-/* Table */
+/* Tabelle */
 .kk-table-wrap { flex: 1; overflow-y: auto; }
+
 .kk-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.67rem;
+  font-size: 12px;
 }
+
 .kk-table thead th {
-  background: #12151f;
-  color: #557;
+  background: var(--bg-panel-2);
+  color: var(--text-muted);
   text-align: left;
-  padding: 6px 8px;
-  border-bottom: 1px solid #2a2f42;
-  font-weight: normal;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   position: sticky;
   top: 0;
   z-index: 1;
 }
-.kk-table tbody .kk-row { border-bottom: 1px solid #1c2030; }
-.kk-table tbody .kk-row:hover { background: #20253a; }
-.kk-table tbody .kk-row--selected { background: #1b2a4a; }
-.kk-table td { padding: 5px 8px; color: #c0c8e8; vertical-align: middle; }
+
+.kk-table tbody .kk-row              { border-bottom: 1px solid var(--border); }
+.kk-table tbody .kk-row:hover        { background: var(--bg-row-hover); }
+.kk-table tbody .kk-row--selected    { background: var(--bg-row-sel); }
+.kk-table td { padding: 7px 10px; color: var(--text-primary); vertical-align: middle; }
+
 .kk-td-name {
   max-width: 150px;
   overflow: hidden;
@@ -1138,110 +1329,138 @@ bim-grid[floating] .dashboard-card {
 .kk-act-btn {
   background: none;
   border: none;
-  color: #446;
+  color: var(--text-muted);
   cursor: pointer;
-  padding: 2px 5px;
-  border-radius: 3px;
-  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  transition: all 0.12s;
 }
-.kk-act-btn:hover { background: #252a3a; color: #c0c8e8; }
-.kk-act-btn--del:hover { color: #ff4455; background: rgba(255,68,85,0.1); }
+.kk-act-btn:hover         { background: var(--bg-row-hover); color: var(--text-primary); }
+.kk-act-btn--del:hover    { color: var(--red); background: var(--red-light); }
 
 .kk-color-dot {
   display: inline-block;
-  width: 11px;
-  height: 11px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   vertical-align: middle;
-  border: 1px solid rgba(255,255,255,0.15);
+  border: 1px solid rgba(0,0,0,0.10);
 }
 
 .kk-table-footer {
-  padding: 8px 8px 6px;
-  border-top: 1px solid #2a2f42;
+  padding: 8px;
+  border-top: 1px solid var(--border);
   flex-shrink: 0;
+  background: var(--bg-panel);
 }
+
 .kk-add-btn {
   background: none;
-  border: 1px dashed #2a2f42;
-  color: #5c7cfa;
-  border-radius: 4px;
-  padding: 6px;
-  font-size: 0.67rem;
+  border: 1.5px dashed var(--border);
+  color: var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 7px;
+  font-size: 11px;
+  font-family: var(--font-sans);
   cursor: pointer;
   width: 100%;
+  transition: all 0.15s;
 }
-.kk-add-btn:hover { background: #192040; border-color: #5c7cfa; }
+.kk-add-btn:hover { background: var(--accent-light); border-color: var(--accent); }
 
-/* Form */
+/* Formular */
 .kk-form-title {
-  font-size: 0.7rem;
-  font-weight: bold;
-  color: #e8ecf8;
-  margin-bottom: 12px;
-  padding-bottom: 7px;
-  border-bottom: 1px solid #2a2f42;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
 }
+
 .kk-form-empty {
-  color: #446;
-  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-size: 12px;
   text-align: center;
   margin-top: 50px;
   line-height: 2;
 }
-.kk-field { margin-bottom: 9px; }
+
+.kk-field { margin-bottom: 10px; }
+
 .kk-field label {
   display: block;
-  font-size: 0.6rem;
-  color: #6688aa;
-  margin-bottom: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.5px;
 }
+
 .kk-field input,
 .kk-field select,
 .kk-field textarea {
   width: 100%;
-  background: #131726;
-  border: 1px solid #252d48;
-  border-radius: 4px;
-  color: #c0c8e8;
-  padding: 5px 8px;
-  font-size: 0.67rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 7px 10px;
+  font-size: 12px;
   box-sizing: border-box;
-  font-family: inherit;
+  font-family: var(--font-sans);
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 .kk-field input:focus,
-.kk-field select:focus { outline: none; border-color: #5c7cfa; }
-.kk-field textarea { resize: vertical; min-height: 48px; }
-.kk-hint { font-size: 0.59rem; color: #446; margin-top: 2px; }
+.kk-field select:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+.kk-field textarea { resize: vertical; min-height: 52px; }
+.kk-hint { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
 .kk-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
 .kk-form-actions {
   display: flex;
   gap: 8px;
-  margin-top: 14px;
-  padding-top: 10px;
-  border-top: 1px solid #2a2f42;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
+
 .kk-btn-primary {
-  background: #2a4580;
-  border: 1px solid #3a55a0;
-  color: #e8ecf8;
-  border-radius: 4px;
-  padding: 6px 12px;
-  font-size: 0.67rem;
+  background: var(--accent);
+  border: none;
+  color: white;
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  font-size: 12px;
+  font-family: var(--font-sans);
   cursor: pointer;
   flex: 1;
+  font-weight: 500;
+  transition: background 0.15s;
 }
-.kk-btn-primary:hover { background: #3a55a0; }
+.kk-btn-primary:hover { background: var(--accent-hover); }
+
 .kk-btn-secondary {
-  background: #1e2235;
-  border: 1px solid #2a2f42;
-  color: #c0c8e8;
-  border-radius: 4px;
-  padding: 6px 12px;
-  font-size: 0.67rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  font-size: 12px;
+  font-family: var(--font-sans);
   cursor: pointer;
+  transition: background 0.15s;
 }
-.kk-btn-secondary:hover { background: #2a2f42; }
+.kk-btn-secondary:hover { background: var(--bg-row-hover); }
+
+/* ─── 15. SCROLLBARS ─────────────────────────────────────────────────────── */
+::-webkit-scrollbar              { width: 6px; height: 6px; }
+::-webkit-scrollbar-track        { background: var(--bg-panel-2); }
+::-webkit-scrollbar-thumb        { background: var(--border-2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover  { background: var(--text-muted); }

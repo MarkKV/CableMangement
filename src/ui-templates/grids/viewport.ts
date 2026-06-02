@@ -75,7 +75,7 @@ export const viewportGridTemplate: BUI.StatefullComponent<ViewportGridState> = (
               <bim-button ?active=${areaMeasurer.enabled} label="Area" @click=${onAreaMeasurement}></bim-button>
             </bim-context-menu>
           </bim-button>
-          <bim-button ?active=${clipper.enabled} @click=${onModelSection} label="Section" tooltip-title="Model Section" icon=${appIcons.CLIPPING}></bim-button> 
+          <bim-button ?active=${clipper.enabled} @click=${onModelSection} label="Section" tooltip-title="Model Section" icon=${appIcons.CLIPPING}></bim-button>
         </bim-toolbar-section>
       </bim-toolbar>
     `;
@@ -94,12 +94,13 @@ export const viewportGridTemplate: BUI.StatefullComponent<ViewportGridState> = (
     const grid = e as BUI.Grid<ViewportGridLayouts, ViewportGridElements>;
     grid.elements = elements;
 
+    // Toolbar steht oben (erste Zeile) → ACC-Topbar-Stil
     grid.layouts = {
       main: {
         template: `
+          "bottomToolbar bottomToolbar bottomToolbar" auto
           "leftToolbar messages rightToolbar" auto
           "leftToolbar empty rightToolbar" 1fr
-          "bottomToolbar bottomToolbar bottomToolbar" auto
           /auto 1fr auto
         `,
       },

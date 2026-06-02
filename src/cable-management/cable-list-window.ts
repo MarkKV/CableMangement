@@ -191,14 +191,14 @@ function esc(s: string): string {
 }
 
 function statusBadge(status: string): string {
-  const map: Record<string, string> = {
-    geplant:         "#3d8bff",
-    verlegt:         "#00e67a",
-    geprüft:         "#8aaad0",
-    "in Bearbeitung":"#ffaa00",
+  const map: Record<string, [string, string, string]> = {
+    geplant:          ["#e8f4fb", "#0696d7", "#b3ddf2"],
+    "in Bearbeitung": ["#fef0e8", "#e8793a", "#f5c09e"],
+    verlegt:          ["#e3f5ef", "#00875a", "#9fd4c0"],
+    geprüft:          ["#f0f0f5", "#6b7a8d", "#dde2e8"],
   };
-  const c = map[status] ?? "#888";
-  return `<span class="cw-badge" style="color:${c};border-color:${c}40;background:${c}18">${esc(status)}</span>`;
+  const [bg, color, border] = map[status] ?? ["#f5f7f9", "#8a97a8", "#dde2e8"];
+  return `<span class="cw-badge" style="background:${bg};color:${color};border-color:${border}">${esc(status)}</span>`;
 }
 
 function buildTableHTML(): string {

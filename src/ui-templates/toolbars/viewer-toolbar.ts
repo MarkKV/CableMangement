@@ -173,30 +173,30 @@ export const viewerToolbarTemplate: BUI.StatefullComponent<
 
   return BUI.html`
     <bim-toolbar>
-      <bim-toolbar-section label="Visibility" icon=${appIcons.SHOW}>
-        <bim-button tooltip-title=${tooltips.SHOW_ALL.TITLE} tooltip-text=${tooltips.SHOW_ALL.TEXT} icon=${appIcons.SHOW} label="Show All" @click=${onShowAll}></bim-button>
-        <bim-button tooltip-title=${tooltips.GHOST.TITLE} tooltip-text=${tooltips.GHOST.TEXT} icon=${appIcons.TRANSPARENT} label="Toggle Ghost" @click=${onToggleGhost}></bim-button>
+      <bim-toolbar-section label="Sichtbarkeit" icon=${appIcons.SHOW}>
+        <bim-button tooltip-title=${tooltips.SHOW_ALL.TITLE} tooltip-text=${tooltips.SHOW_ALL.TEXT} icon=${appIcons.SHOW} label="Alle zeigen" @click=${onShowAll}></bim-button>
+        <bim-button tooltip-title=${tooltips.GHOST.TITLE} tooltip-text=${tooltips.GHOST.TEXT} icon=${appIcons.TRANSPARENT} label="Ghost" @click=${onToggleGhost}></bim-button>
       </bim-toolbar-section>
-      <bim-toolbar-section label="Selection" icon=${appIcons.SELECT}>
+      <bim-toolbar-section label="Selektion" icon=${appIcons.SELECT}>
         ${focusBtn}
-        <bim-button tooltip-title=${tooltips.HIDE.TITLE} tooltip-text=${tooltips.HIDE.TEXT} icon=${appIcons.HIDE} label="Hide" @click=${onHide}></bim-button>
-        <bim-button tooltip-title=${tooltips.ISOLATE.TITLE} tooltip-text=${tooltips.ISOLATE.TEXT} icon=${appIcons.ISOLATE} label="Isolate" @click=${onIsolate}></bim-button>
-        <bim-button icon=${appIcons.COLORIZE} label="Colorize">
+        <bim-button tooltip-title=${tooltips.HIDE.TITLE} tooltip-text=${tooltips.HIDE.TEXT} icon=${appIcons.HIDE} label="Ausblenden" @click=${onHide}></bim-button>
+        <bim-button tooltip-title=${tooltips.ISOLATE.TITLE} tooltip-text=${tooltips.ISOLATE.TEXT} icon=${appIcons.ISOLATE} label="Isolieren" @click=${onIsolate}></bim-button>
+        <bim-button icon=${appIcons.COLORIZE} label="Einfärben">
           <bim-context-menu>
             <div style="display: flex; gap: 0.5rem; width: 10rem;">
               <bim-color-input id=${colorInputId}></bim-color-input>
-              <bim-button label="Apply" @click=${onApplyColor}></bim-button>
+              <bim-button label="Anwenden" @click=${onApplyColor}></bim-button>
             </div>
           </bim-context-menu>
         </bim-button>
       </bim-toolbar-section>
       <bim-toolbar-section label="Kabel" icon="material-symbols:cable">
-        <bim-button icon="mdi:plus" label="Neues Kabel" @click=${onNewCable}
+        <bim-button class="tb-new-cable" icon="mdi:plus" label="Neues Kabel" @click=${onNewCable}
           tooltip-title="Neues Kabel anlegen"
           tooltip-text="Routing-Assistent starten: Quelle, Kabelweg und Ziel im Modell wählen.">
         </bim-button>
         <bim-button icon="mdi:format-list-bulleted"
-          label=${"Erstellte Kabel (" + count + ")"}
+          label=${"Kabel (" + count + ")"}
           @click=${onOpenList}
           tooltip-title="Kabelliste öffnen"
           tooltip-text="Alle erstellten Kabel anzeigen, im Modell highlighten oder löschen.">
