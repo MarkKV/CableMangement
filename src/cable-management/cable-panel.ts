@@ -8,10 +8,10 @@ import {
   cableRegistry,
   nextCableId,
   getNextColor,
-  CABLE_TYPES,
-  VOLTAGE_OPTIONS,
   notifyCableChange,
 } from "./cables";
+import { getCatalog } from "./catalog";
+import { openCatalogWindow } from "./catalog-window";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Exported panel state (used by content grid)
@@ -1058,9 +1058,7 @@ function renderPanel() {
     return;
   }
 
-  const shortType =
-    CABLE_TYPES.find((t) => t.value === _rs.cable!.type)
-      ?.label.split("—")[0].trim() ?? _rs.cable.type;
+  const shortType = (_rs.cable.typeLabel || _rs.cable.type).split("—")[0].trim();
 
   _panel.innerHTML = `
     <div class="rp-header">
@@ -1377,12 +1375,13 @@ function ensureModal() {
     `<h3 class="cm-modal-title">Neues Kabel anlegen</h3>` +
     `<div class="cm-field"><label>Bezeichnung</label>` +
     `<input id="cm-name" type="text" placeholder="z.B. Einspeisung UV EG-01"></div>` +
-    `<div class="cm-field"><label>Kabeltyp</label>` +
-    `<select id="cm-type">${CABLE_TYPES.map((t) => `<option value="${t.value}">${t.label}</option>`).join("")}</select></div>` +
+    `<div class="cm-field">` +
+    `<label>Kabeltyp <span id="cm-catalog-link" class="cm-catalog-link" title="Kabelkatalog öffnen">⚙ verwalten</span></label>` +
+    `<select id="cm-type"></select></div>` +
     `<div class="cm-field"><label>Funktion / Stromkreis</label>` +
     `<input id="cm-circuit" type="text" placeholder="z.B. Haupteinspeisung"></div>` +
-    `<div class="cm-field"><label>Spannung</label>` +
-    `<select id="cm-voltage">${VOLTAGE_OPTIONS.map((v) => `<option value="${v}">${v}</option>`).join("")}</select></div>` +
+    `<div class="cm-field"><label>Spannungsebene</label>` +
+    `<select id="cm-voltage"></select></div>` +
     `<div class="cm-modal-buttons">` +
     `<button id="cm-confirm" class="cm-btn-primary">Anlegen &amp; Routing starten</button>` +
     `<button id="cm-cancel" class="cm-btn-secondary">Abbrechen</button>` +
@@ -1394,30 +1393,78 @@ function ensureModal() {
 function openModal(
   onConfirm: (d: { name: string; type: string; typeLabel: string; circuit: string; voltage: string }) => void
 ) {
-  const modal = ensureModal();
-  const nameEl = document.getElementById("cm-name") as HTMLInputElement;
-  const typeEl = document.getElementById("cm-type") as HTMLSelectElement;
+  const modal     = ensureModal();
+  const nameEl    = document.getElementById("cm-name")    as HTMLInputElement;
+  const typeEl    = document.getElementById("cm-type")    as HTMLSelectElement;
   const circuitEl = document.getElementById("cm-circuit") as HTMLInputElement;
   const voltageEl = document.getElementById("cm-voltage") as HTMLSelectElement;
+
+  // Selects aus Katalog befüllen
+  const cat = getCatalog();
+
+  // Kabeltypen nach Spannungsebene gruppieren
+  const groupedHtml = cat.voltageLevels.map((vl) => {
+    const types = cat.cableTypes.filter((t) => t.voltageLevel === vl.id);
+    if (types.length === 0) return "";
+    const opts = types.map((t) =>
+      `<option value="${t.id}">${t.name} — ${t.maxCurrent} A</option>`
+    ).join("");
+    return `<optgroup label="── ${vl.name} ${vl.voltage} ──">${opts}</optgroup>`;
+  }).join("");
+  typeEl.innerHTML = groupedHtml || `<option value="">— Kein Kabeltyp im Katalog —</option>`;
+
+  // Spannungsebenen
+  voltageEl.innerHTML = cat.voltageLevels
+    .map((vl) => `<option value="${vl.id}">${vl.name} — ${vl.voltage}</option>`)
+    .join("") || `<option value="">— Keine Spannungsebene —</option>`;
+
+  // Spannung automatisch vorausfüllen wenn Kabeltyp gewählt
+  function onTypeChange() {
+    const chosen = cat.cableTypes.find((t) => t.id === typeEl.value);
+    if (chosen) voltageEl.value = chosen.voltageLevel;
+  }
+  typeEl.addEventListener("change", onTypeChange);
+  onTypeChange(); // initial
+
   nameEl.value = ""; circuitEl.value = "";
   modal.showModal();
 
-  const cancelBtn = document.getElementById("cm-cancel")!;
+  const cancelBtn  = document.getElementById("cm-cancel")!;
   const confirmBtn = document.getElementById("cm-confirm")!;
+  const catalogLink = document.getElementById("cm-catalog-link")!;
+
   const cleanup = () => {
     cancelBtn.removeEventListener("click", onCancelClick);
     confirmBtn.removeEventListener("click", onConfirmClick);
+    catalogLink.removeEventListener("click", onCatalogClick);
+    typeEl.removeEventListener("change", onTypeChange);
   };
+
   function onCancelClick() { modal.close(); cleanup(); }
+
   function onConfirmClick() {
     const name = nameEl.value.trim();
     if (!name) { nameEl.focus(); return; }
-    const chosen = CABLE_TYPES.find((t) => t.value === typeEl.value)!;
+    const chosenType = cat.cableTypes.find((t) => t.id === typeEl.value);
+    const chosenVL   = cat.voltageLevels.find((v) => v.id === voltageEl.value);
     modal.close(); cleanup();
-    onConfirm({ name, type: typeEl.value, typeLabel: chosen.label, circuit: circuitEl.value.trim(), voltage: voltageEl.value });
+    onConfirm({
+      name,
+      type:      typeEl.value,
+      typeLabel: chosenType?.name ?? typeEl.value,
+      circuit:   circuitEl.value.trim(),
+      voltage:   chosenVL?.voltage ?? voltageEl.value,
+    });
   }
+
+  function onCatalogClick() {
+    modal.close(); cleanup();
+    openCatalogWindow();
+  }
+
   cancelBtn.addEventListener("click", onCancelClick);
   confirmBtn.addEventListener("click", onConfirmClick);
+  catalogLink.addEventListener("click", onCatalogClick);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1465,7 +1512,7 @@ export function openNewCableModal(): void {
 
 function renderCableEntry(cable: Cable) {
   const statusColor = cable.status === "geplant" ? "#00e67a" : cable.status === "in Bearbeitung" ? "#ff8c00" : "#888";
-  const typeLabel = CABLE_TYPES.find((t) => t.value === cable.type)?.label ?? cable.type;
+  const typeLabel = cable.typeLabel || cable.type;
   return BUI.html`
     <div class="cm-cable-entry" style="border-left:3px solid ${cable.color};">
       <div class="cm-cable-header">

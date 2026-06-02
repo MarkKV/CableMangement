@@ -5,7 +5,6 @@ import * as FRAGS from "@thatopen/fragments";
 import {
   Cable,
   cableRegistry,
-  CABLE_TYPES,
   addCableChangeListener,
   notifyCableChange,
 } from "./cables";
@@ -212,9 +211,7 @@ function buildTableHTML(): string {
   const rows = cableRegistry
     .map((c) => {
       const sel = _selectedCableId === c.id;
-      const typeShort =
-        CABLE_TYPES.find((t) => t.value === c.type)
-          ?.label.split("—")[0].trim() ?? c.type;
+      const typeShort = (c.typeLabel || c.type).split("—")[0].trim();
       return (
         `<tr class="cw-row${sel ? " cw-row--sel" : ""}" data-cid="${c.id}">` +
         `<td><span class="cw-id" style="color:${c.color}">${esc(c.id)}</span></td>` +

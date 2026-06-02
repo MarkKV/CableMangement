@@ -7,6 +7,7 @@ import { appIcons, tooltips } from "../../globals";
 import { cableRegistry, addCableChangeListener } from "../../cable-management/cables";
 import { openNewCableModal } from "../../cable-management/cable-panel";
 import { openCableWindow } from "../../cable-management/cable-list-window";
+import { openCatalogWindow } from "../../cable-management/catalog-window";
 
 export interface ViewerToolbarState {
   components: OBC.Components;
@@ -166,8 +167,9 @@ export const viewerToolbarTemplate: BUI.StatefullComponent<
 
   // Cable toolbar handlers
   const count = cableRegistry.length;
-  const onNewCable = () => openNewCableModal();
-  const onOpenList = () => openCableWindow(components, world);
+  const onNewCable    = () => openNewCableModal();
+  const onOpenList    = () => openCableWindow(components, world);
+  const onOpenCatalog = () => openCatalogWindow();
 
   return BUI.html`
     <bim-toolbar>
@@ -198,6 +200,12 @@ export const viewerToolbarTemplate: BUI.StatefullComponent<
           @click=${onOpenList}
           tooltip-title="Kabelliste öffnen"
           tooltip-text="Alle erstellten Kabel anzeigen, im Modell highlighten oder löschen.">
+        </bim-button>
+        <bim-button icon="mdi:book-open-outline"
+          label="Kabelkatalog"
+          @click=${onOpenCatalog}
+          tooltip-title="Kabelkatalog verwalten"
+          tooltip-text="Kabeltypen und Spannungsebenen projektspezifisch anlegen und bearbeiten.">
         </bim-button>
       </bim-toolbar-section>
     </bim-toolbar>
